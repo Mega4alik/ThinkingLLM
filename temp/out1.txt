@@ -1,0 +1,321 @@
+# R1 v1
+thinking_steps=200, Step2: last_token, Step3: think_end_token, max_new_tokens=1024
+
+tokenizer: 151643 right
+Dataset test sizes: 14
+
+
+To determine Allen's age 10 years from now, follow these steps:
+
+1. **Understand the Ratio**: The ages of Darrell and Allen are in the ratio of 7:11. This means for every 7 years Darrell is old, Allen is 11 years old.
+
+2. **Set Up Variables**: Let Darrell's current age be \(7x\) and Allen's current age be \(11x\), where \(x\) is a common multiplier.
+
+3. **Total Age Equation**: The sum of their ages is 162 years.
+   \[
+   7x + 11x = 162
+   \]
+   \[
+   18x = 162
+   \]
+   \[
+   x = 9
+   \]
+
+4. **Find Allen's Current Age**: Multiply \(x\) by 11.
+   \[
+   11x = 11 \times 9 = 99
+   \]
+
+5. **Calculate Age 10 Years from Now**: Add 10 years to Allen's current age.
+   \[
+   99 + 10 = 109
+   \]
+
+**Final Answer**: Allen will be 109 years old 10 years from now.  -- LABEL: d#### 109   -- gen_ids: 277 
+#==================
+
+
+
+To determine how many buttons Lorraine has by the end, we'll break down her trades step by step.
+
+1. **Initial Stickers:**
+   - Small stickers: 30
+   - Large stickers: 40
+
+2. **First Trade:**
+   - Lorraine trades 90% of her small stickers for large buttons.
+   - 90% of 30 small stickers = 0.9 × 30 = 27 small stickers.
+   - Each small sticker is worth 1 small button.
+   - So, she gets 27 large buttons.
+
+3. **Second Trade:**
+   - Lorraine trades 50% of her large stickers for large buttons.
+   - 50% of 40 large stickers = 0.5 × 40 = 20 large stickers.
+   - Each large sticker is worth 3 small stickers, which is equivalent to 3 small buttons.
+   - So, she gets 20 × 3 = 60 large buttons.
+
+4. **Third Trade:**
+   - The remaining large stickers are traded for small buttons.
+   - Total large stickers after first two trades: 40 - 20 = 20.
+   - 20 large stickers × 3 small buttons per large sticker = 60 small buttons.
+
+5. **Total Buttons:**
+   - Large buttons received: 27 + 60 = 87 large buttons.
+   - Small buttons received: 60 small buttons.
+   - Total buttons = 87 + 60 = 147 buttons.
+
+**Final Answer:** 147 buttons  -- LABEL: 89#### 89   -- gen_ids: 348 
+#==================
+
+
+
+**Indras's Name:**
+- Indras has 6 letters.
+
+**Sister's Name:**
+- Half of Indras' name: 6 / 2 = 3
+- 4 more letters: 3 + 4 = 7
+
+**Total Letters:**
+- Indras: 6
+- Sister: 7
+- Combined: 6 + 7 = 13
+
+**Final Answer:**
+Indras has 6 letters, and her sister has 7 letters. Together, their names have a total of 13 letters.  -- LABEL: s.#### 13   -- gen_ids: 120 
+#==================
+
+
+
+To determine how many more laps Bethany can run compared to Quinn, follow these steps:
+
+1. **Bethany's Laps**: Bethany can run 10 laps in one hour.
+
+2. **Trey's Laps**: Trey runs 4 more laps than Bethany.
+   - **Trey's Laps** = 10 laps + 4 laps = **14 laps**.
+
+3. **Shaelyn's Laps**: Shaelyn runs half as many laps as Trey.
+   - **Shaelyn's Laps** = 14 laps / 2 = **7 laps**.
+
+4. **Quinn's Laps**: Quinn runs 2 fewer laps than Shaelyn.
+   - **Quinn's Laps** = 7 laps - 2 laps = **5 laps**.
+
+5. **Difference Between Bethany and Quinn**: Subtract Quinn's laps from Bethany's laps.
+   - **Difference** = 10 laps - 5 laps = **5 laps**.
+
+**Final Answer**: Bethany can run **5 more laps** than Quinn.  -- LABEL: nn.#### 5   -- gen_ids: 225 
+#==================
+
+
+
+To determine how many children are following the ice cream truck, let's break down the problem step by step:
+
+1. **First Street:**
+   - The truck reaches the end of the first street.
+   - There are **5 children** with whom the truck is associated.
+
+2. **Second Street:**
+   - Each child in the existing group is joined by another child.
+   - Since there are 5 children, each child brings along 1 additional child.
+   - Total children after the second street: \(5 + 5 = 10\).
+
+3. **Third Street:**
+   - Each child in the existing group is joined by another 2 children.
+   - With 10 children, each child brings along 2 additional children.
+   - Total children after the third street: \(10 + (10 \times 2) = 10 + 20 = 30\).
+
+4. **Children Leaving:**
+   - The original 5 children give up and leave the group.
+
+**Final Answer:**
+\boxed{30}  -- LABEL: n.#### 25   -- gen_ids: 224 
+#==================
+
+
+
+To determine how many minutes Kim slept on her bed that day, we'll calculate the total time from when she went to sleep until she woke up.
+
+1. **Sleepwalk duration**: She sleptwalked from 2:15 to 2:38 am, which is 23 minutes.
+2. **Early wake-up**: She woke up 5 minutes earlier than usual, meaning she went to the bathroom at 2:10 am instead of 2:15 am.
+3. **Total sleep duration**: From 10 p.m. to 2:10 am is 430 minutes.
+
+Adding the sleepwalk duration and the early wake-up time gives the total sleep time on her bed that day.
+
+**Answer**: 430 minutes  -- LABEL: .#### 452   -- gen_ids: 161 
+#==================
+
+
+
+To determine how many bananas Gunther found in the pile, let's break down the events step by step:
+
+1. **Initial Bananas**: Gunther starts with 48 bananas.
+
+2. **Arnold Steals Half on the First Day**:
+   - Arnold steals half of the 48 bananas.
+   - Stealing half: \( \frac{48}{2} = 24 \) bananas.
+   - Bananas remaining: \( 48 - 24 = 24 \) bananas.
+
+3. **Arnold Adds 25 Bananas the Next Day**:
+   - Arnold adds 25 bananas to the pile.
+   - New total: \( 24 + 25 = 49 \) bananas.
+
+4. **Arnold Steals Another 12 Bananas**:
+   - Arnold steals 12 bananas from the pile.
+   - Bananas remaining: \( 49 - 12 = 37 \) bananas.
+
+5. **Arnold Adds 6 Bananas on the Third Day**:
+   - Gunther adds 6 more bananas to the pile.
+   - New total: \( 37 + 6 = 43 \) bananas.
+
+6. **Final Count**:
+   - After all events, Gunther finds **43 bananas** in the pile.
+
+**Final Answer**: \(\boxed{43}\)  -- LABEL: s.#### 43   -- gen_ids: 295 
+#==================
+
+
+
+To determine the total number of utensils Jonathan has remaining after receiving the gift, follow these steps:
+
+1. **Calculate the initial number of measuring spoons:**
+   - Jonathan has 2/3 as many measuring spoons as measuring cups.
+   - He has 2 dozen cups, which is 24 cups.
+   - Measuring spoons = (2/3) * 24 = 16 spoons.
+
+2. **Add the gift:**
+   - Jonathan receives 6 more measuring spoons.
+   - Total measuring spoons = 16 + 6 = 22 spoons.
+
+3. **Calculate the total number of utensils:**
+   - Total utensils = measuring cups + measuring spoons = 24 + 22 = 46.
+
+**Final Answer:** 46  -- LABEL: ls#### 34   -- gen_ids: 174 
+#==================
+
+
+
+To determine how many feet the turtle can crawl in 40 seconds, we first need to find the turtle's speed. Since the cat is 5 times faster than the turtle and the cat's speed is 15 feet per second, the turtle's speed is:
+
+\[
+\text{Turtle's speed} = \frac{\text{Cat's speed}}{5} = \frac{15 \text{ feet/second}}{5} = 3 \text{ feet/second}
+\]
+
+Next, we calculate the distance the turtle can crawl in 40 seconds by multiplying its speed by the time:
+
+\[
+\text{Distance} = \text{Speed} \times \text{Time} = 3 \text{ feet/second} \times 40 \text{ seconds} = 120 \text{ feet}
+\]
+
+**Answer:** The turtle can crawl 120 feet in 40 seconds.  -- LABEL: t#### 120   -- gen_ids: 200 
+#==================
+
+
+
+To determine how many flights to France the first plane takes in one day, let's break down the information step by step.
+
+1. **Total Flights per Day:**
+   - The first plane makes a total of **44 trips** (given).
+
+2. **First Plane's Flights:**
+   - The first plane flies to Greece for **3/4** of its daily flights.
+   - The remaining **1/4** of its flights are split equally between France and Germany.
+
+3. **Calculating Flights to France:**
+   - Since the remaining **1/4** is split equally between France and Germany, the number of flights to France is:
+     \[
+     \text{Flights to France} = \frac{1}{4} \times 44 = 11
+     \]
+
+**Answer:** The first plane takes **11 flights to France** in one day.  -- LABEL: y.#### 11   -- gen_ids: 191 
+#==================
+
+
+
+To determine the number of balloons Sally finally carried into the school, we'll break down the problem step by step:
+
+1. **Initial Balloons:**
+   - Red balloons: 25
+   - Green balloons: 7
+   - Yellow balloons: 12
+
+2. **Bursting of Red Balloons:**
+   - 40% of the red balloons burst.
+   - Number of red balloons that burst: \( 0.4 \times 25 = 10 \)
+   - Remaining red balloons: \( 25 - 10 = 15 \)
+
+3. **Accidental Release of Yellow Balloons:**
+   - Half of the yellow balloons are released.
+   - Number of yellow balloons released: \( \frac{1}{2} \times 12 = 6 \)
+   - Remaining yellow balloons: \( 12 - 6 = 6 \)
+
+4. **Balloons from the Tree:**
+   - 8 blue balloons are caught in a tree.
+   - 75% of these blue balloons are added to Sally's clutch.
+   - Number of blue balloons added: \( 0.75 \times 8 = 6 \)
+   - Total blue balloons after addition: \( 8 + 6 = 14 \)
+
+5. **Total Balloons Carried into the School:**
+   - Remaining red balloons: 15
+   - Remaining yellow balloons: 6
+   - Blue balloons: 14
+   - Total: \( 15 + 6 + 14 = 35 \)
+
+**Final Answer:** \(\boxed{35}\)  -- LABEL: ns#### 34   -- gen_ids: 355 
+#==================
+
+
+
+Kira bought a total of 3 apples, 5 bananas, and 6 oranges, which adds up to 14 pieces of fruit. After Lola ate 2 pieces, there are 12 pieces of fruit left.
+
+**Answer:** 12 pieces of fruit are left.  -- LABEL: t.#### 12   -- gen_ids: 61 
+#==================
+
+
+
+To determine the amount of water in the remaining 24 liters after spilling one liter of orange drink, we'll calculate the water content from both the orange and pineapple drinks separately and then combine them.
+
+1. **Orange Drink:**
+   - **Total Volume:** 10 liters
+   - **Water Content:** Two-thirds of 10 liters = \( \frac{2}{3} \times 10 = 6.\overline{6} \) liters
+   - **Spilled Volume:** 1 liter
+   - **Remaining Orange Drink:** 10 - 1 = 9 liters
+   - **Water in Remaining Orange Drink:** \( \frac{2}{3} \times 9 = 6 \) liters
+
+2. **Pineapple Drink:**
+   - **Total Volume:** 15 liters
+   - **Water Content:** Three-fifths of 15 liters = \( \frac{3}{5} \times 15 = 9 \) liters
+
+3. **Total Water in the Mixture:**
+   - Water from Orange Drink: 6 liters
+   - Water from Pineapple Drink: 9 liters
+   - **Total Water:** 6 + 9 = 15 liters
+
+Therefore, the remaining 24 liters contain **15 liters of water**.  -- LABEL: s.#### 15   -- gen_ids: 282 
+#==================
+
+
+
+To determine how many movies Jill and her friends can watch in 4 weeks, we'll break down the problem step by step.
+
+1. **Movies Watched on Saturday:**
+   - They watch 4 movies every Saturday.
+
+2. **Movies Watched on Sunday:**
+   - They watch half the number of movies on Sunday compared to Saturday.
+   - Half of 4 is 2.
+   - So, they watch 2 movies on Sunday.
+
+3. **Total Movies Watched in One Weekend:**
+   - Saturday: 4 movies
+   - Sunday: 2 movies
+   - Total: 4 + 2 = 6 movies per weekend.
+
+4. **Total Movies Watched in 4 Weeks:**
+   - Since they watch 6 movies each weekend, over 4 weeks they watch:
+   - 6 movies/weekend × 4 weeks = 24 movies.
+
+**Final Answer:** They can watch a total of 24 movies in 4 weeks.  -- LABEL: s.#### 24   -- gen_ids: 207 
+#==================
+
+{'accuracy': 1.0}

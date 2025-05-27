@@ -1,0 +1,329 @@
+tokenizer: 151643 right
+Dataset test sizes: 14
+
+
+To determine Allen's age 10 years from now, follow these steps:
+
+1. **Understand the Ratio:**
+   - The ages of Darrell and Allen are in the ratio of 7:11.
+   - This means for every 7 years Darrell is old, Allen is 11 years old.
+
+2. **Express the Ages in Terms of a Variable:**
+   - Let the common multiple be \( x \).
+   - Darrell's age = \( 7x \)
+   - Allen's age = \( 11x \)
+
+3. **Set Up the Equation for the Total Age:**
+   - The sum of their ages is 162.
+   - \( 7x + 11x = 162 \)
+
+4. **Solve for \( x \):**
+   - Combine like terms: \( 18x = 162 \)
+   - Divide both sides by 18: \( x = 9 \)
+
+5. **Find Allen's Current Age:**
+   - Allen's age = \( 11x = 11 \times 9 = 99 \)
+
+6. **Calculate Allen's Age 10 Years from Now:**
+   - Add 10 years to his current age: \( 99 + 10 = 109 \)
+
+**Final Answer:** \boxed{109}  -- LABEL: d#### 109   -- gen_ids: 297 
+#==================
+
+
+
+**Final Answer:**
+
+Lorraine ends up with **120 buttons** by the end of the trade.  -- LABEL: 89#### 89   -- gen_ids: 25 
+#==================
+
+
+
+**Indras's Name:**
+- Indras has 6 letters.
+
+**Sister's Name:**
+- The sister's name has 4 more letters than half of Indras' name.
+- Half of Indras' name: \( \frac{6}{2} = 3 \) letters.
+- 4 more letters: \( 3 + 4 = 7 \) letters.
+
+**Total Letters:**
+- Indras: 6 letters
+- Sister: 7 letters
+- **Total:** \( 6 + 7 = 13 \) letters
+
+**Final Answer:**
+\[
+\boxed{13}
+\]  -- LABEL: s.#### 13   -- gen_ids: 137 
+#==================
+
+
+
+To determine how many more laps Bethany can run compared to Quinn, let's break down the information step by step.
+
+1. **Bethany's Laps:**
+   - Bethany can run **10 laps** in one hour.
+
+2. **Trey's Laps:**
+   - Trey can run **4 more laps** than Bethany.
+   - **Trey's Laps = Bethany's Laps + 4**
+   - **Trey's Laps = 10 + 4 = 14 laps**
+
+3. **Shaelyn's Laps:**
+   - Shaelyn can run **half as many laps** as Trey.
+   - **Shaelyn's Laps = Trey's Laps / 2**
+   - **Shaelyn's Laps = 14 / 2 = 7 laps**
+
+4. **Quinn's Laps:**
+   - Quinn can run **2 fewer laps** than Shaelyn.
+   - **Quinn's Laps = Shaelyn's Laps - 2**
+   - **Quinn's Laps = 7 - 2 = 5 laps**
+
+5. **Difference Between Bethany and Quinn:**
+   - **Difference = Bethany's Laps - Quinn's Laps**
+   - **Difference = 10 - 5 = 5 laps**
+
+**Final Answer:** Bethany can run **5 more laps** than Quinn.  -- LABEL: nn.#### 5   -- gen_ids: 296 
+#==================
+
+
+
+**Final Answer:**
+
+The number of children following the truck after all streets is **5**.  -- LABEL: n.#### 25   -- gen_ids: 22 
+#==================
+
+
+
+To determine how many minutes Kim slept on her bed that day, we'll break down the information step by step.
+
+1. **Normal Sleep Hours:**
+   - Kim usually sleeps from 10 p.m. to 6 a.m.
+   - This is a total of **8 hours** (from 10 p.m. to 6 a.m.).
+
+2. **Additional Information:**
+   - On this particular day, Kim woke up at **2:15 a.m.** instead of her usual time.
+   - She also woke up **5 minutes earlier** than usual to go to the bathroom.
+
+3. **Calculating the Total Time She Was Woken Up:**
+   - **Usual Wake-Up Time:** 6 a.m.
+   - **Early Wake-Up Time:** 2:15 a.m.
+   - **Early Wake-Up for Bathroom:** 5 minutes earlier than usual.
+     - Usual early wake-up time: 6 a.m. - 5 minutes = 5:55 a.m.
+     - Early wake-up for bathroom: 5:55 a.m. - 5 minutes = 5:50 a.m.
+
+4. **Determining the Time She Was Woken Up:**
+   - She was woke up at **2:15 a.m.** instead of her usual wake-up time.
+   - She also woke up at **5:50 a.m.** to go to the bathroom.
+
+5. **Calculating the Total Time She Was Woken Up:**
+   - From **2:15 a.m.** to **5:50 a.m.** is **3 hours and 35 minutes**.
+
+6. **Calculating the Total Time She Was Woken Up on This Day:**
+   - **Early Wake-Up:** 2:15 a.m.
+   - **Early Wake-Up for Bathroom:** 5:50 a.m.
+   - **Total Time Woken Up:** 3 hours and 35 minutes.
+
+7. **Calculating the Time She Was Woken Up Normally:**
+   - From **10 p.m.** to **6 a.m.** is **8 hours**.
+
+8. **Calculating the Difference in Wake-Up Times:**
+   - **Normal Wake-Up Time:** 8 hours.
+   - **Early Wake-Up Time:** 3 hours and 35 minutes.
+   - **Difference:** 8 hours - 3 hours 35 minutes = **4 hours and 25 minutes**.
+
+9. **Calculating the Total Time Kim Was Woken Up on This Day:**
+   - **Early Wake-Up:** 2:15 a.m.
+   - **Early Wake-Up for Bathroom:** 5:50 a.m.
+   - **Total Time Woken Up:** 3 hours and 35 minutes.
+
+10. **Calculating the Total Time Kim Was Woken Up Normally:**
+    - From **10 p.m.** to **6 a.m.** is **8 hours**.
+
+11. **Calculating the Difference in Wake-Up Times:**
+    - **Normal Wake-Up Time:** 8 hours.
+    - **Early Wake-Up Time:** 3 hours and 35 minutes.
+    - **Difference:** 8 hours - 3 hours 35 minutes = **4 hours and 25 minutes**.
+
+12. **Calculating the Total Time Kim Was Woken Up on This Day:**
+    - **Early Wake-Up:** 2:15 a.m.
+    - **Early Wake-Up for Bathroom:** 5:50 a.m.
+    - **Total Time Woken Up:** 3 hours and 35 minutes.
+
+13. **Calculating the Total Time Kim Was Woken Up Normally:**
+    - From **10 p.m.** to **6 a.m.** is **8 hours**.
+
+14. **Calculating the Difference in Wake-Up Times:**
+    - **Normal Wake-Up Time:** 8 hours.
+    - **Early Wake-Up Time:** 3 hours and 35 minutes.
+    - **Difference:** 8 hours - 3 hours 35 minutes = **4 hours and 25 minutes**.
+
+15. **Calculating the Total Time Kim Was Woken Up on This Day:**
+    - **Early Wake-Up:** 2:15 a.m.
+    - **Early Wake-Up for Bathroom:** 5:50 a.m.
+    - **Total Time Woken Up:** 3 hours and 35 minutes.
+
+16. **Calculating the Total Time Kim Was Woken Up Normally:**
+    - From **10 p.m.** to **6 a.m.** is **8 hours**.
+
+17. **Calculating the Difference in Wake-Up Times:**
+    - **Normal Wake-Up Time:** 8 hours.
+    - **Early Wake  -- LABEL: .#### 452   -- gen_ids: 1024 
+#==================
+
+
+
+**Final Answer:**  
+Gunther found **48 bananas** in the pile.  -- LABEL: s.#### 43   -- gen_ids: 19 
+#==================
+
+
+
+**Solution:**
+
+1. **Determine the number of measuring cups:**
+   - Jonathan has **2 dozen cups**.
+   - 1 dozen = 12, so 2 dozen = 24 cups.
+   - Total measuring cups = 24.
+
+2. **Find the number of measuring spoons:**
+   - Jonathan has **2/3 as many measuring spoons as measuring cups**.
+   - Number of measuring spoons = (2/3) × 24 = 16.
+
+3. **Calculate the total number of utensils after receiving gifts:**
+   - Jonathan receives **6 measuring spoons for his birthday**.
+   - Total measuring spoons after gift = 16 + 6 = 22.
+   - Total utensils = measuring cups + measuring spoons = 24 + 22 = 46.
+
+**Final Answer:** \boxed{46}  -- LABEL: ls#### 34   -- gen_ids: 194 
+#==================
+
+
+
+**Problem:**  
+Martha's cat is 5 times faster than her turtle. If the cat can run 15 feet/second, how many feet can her turtle crawl in 40 seconds?
+
+**Solution:**  
+
+1. **Determine the turtle's speed:**  
+   The cat is 5 times faster than the turtle.  
+   \[
+   \text{Cat's speed} = 5 \times \text{Turtle's speed}
+   \]  
+   Given the cat's speed is 15 feet/second:  
+   \[
+   15 = 5 \times \text{Turtle's speed}
+   \]  
+   \[
+   \text{Turtle's speed} = \frac{15}{5} = 3 \text{ feet/second}
+   \]
+
+2. **Calculate the distance the turtle crawls in 40 seconds:**  
+   \[
+   \text{Distance} = \text{Speed} \times \text{Time}
+   \]  
+   \[
+   \text{Distance} = 3 \times 40 = 120 \text{ feet}
+   \]
+
+**Final Answer:**  
+The turtle can crawl \(\boxed{120}\) feet in 40 seconds.  -- LABEL: t#### 120   -- gen_ids: 268 
+#==================
+
+
+
+**Solution:**
+
+Let's break down the problem step by step.
+
+1. **Define Variables:**
+   - Let \( F \) be the total number of flights the first plane makes in a day.
+   - The second plane flies exclusively to Poland and makes 44 trips.
+
+2. **Flights of the First Plane:**
+   - The first plane flies to Greece for three-quarters of its flights: \( \frac{3}{4}F \).
+   - The remaining flights are split equally between France and Germany:
+     - To France: \( \frac{1}{2} \times \left(F - \frac{3}{4}F\right) = \frac{1}{2} \times \frac{1}{4}F = \frac{1}{8}F \).
+     - To Germany: Similarly, \( \frac{1}{8}F \).
+
+3. **Flights of the Second Plane:**
+   - The second plane flies to Poland and makes 44 trips, which is half the number of flights the first plane makes:
+     \[
+     44 = \frac{1}{2}F \implies F = 88
+     \]
+
+4. **Flights to France:**
+   - From step 2, the flights to France are \( \frac{1}{8}F \).
+   - Substituting \( F = 88 \):
+     \[
+     \frac{1}{8} \times 88 = 11
+     \]
+
+**Answer:** The first plane takes **11 flights to France** in one day.  -- LABEL: y.#### 11   -- gen_ids: 340 
+#==================
+
+
+
+**Final Answer:**
+
+Sally finally carried **125** balloons into the school.  -- LABEL: ns#### 34   -- gen_ids: 21 
+#==================
+
+
+
+**Final Answer:**
+
+Kira bought a total of 14 pieces of fruit. After Lola ate 2 pieces, there are **12 pieces of fruit left**.  -- LABEL: t.#### 12   -- gen_ids: 38 
+#==================
+
+
+
+To determine the amount of water in the remaining 24 liters of the mixture, we'll follow these steps:
+
+1. **Calculate the water in the orange drink:**
+   - Total orange drink: 10 liters
+   - Fraction that is water: \( \frac{2}{3} \)
+   - Water in orange drink: \( 10 \times \frac{2}{3} = \frac{20}{3} \) liters
+
+2. **Calculate the water in the pineapple drink:**
+   - Total pineapple drink: 15 liters
+   - Fraction that is water: \( \frac{3}{5} \)
+   - Water in pineapple drink: \( 15 \times \frac{3}{5} = 9 \) liters
+
+3. **Total water in the mixture before spilling:**
+   - Total water: \( \frac{20}{3} + 9 = \frac{20}{3} + \frac{27}{3} = \frac{47}{3} \) liters
+
+4. **Adjust for the spilled orange drink:**
+   - Orange drink spilled: 1 liter
+   - Water in spilled orange drink: \( 1 \times \frac{2}{3} = \frac{2}{3} \) liters
+   - Remaining water in orange drink: \( \frac{20}{3} - \frac{2}{3} = \frac{18}{3} = 6 \) liters
+
+5. **Total water in the remaining mixture:**
+   - Total water: \( 6 + 9 = 15 \) liters
+
+**Final Answer:** \(\boxed{15}\) liters  -- LABEL: s.#### 15   -- gen_ids: 363 
+#==================
+
+
+
+To determine how many movies Jill and her friends can watch in 4 weeks, let's break down the information step by step.
+
+1. **Movies Watched on Saturday:**
+   - They watch 4 movies every Saturday.
+
+2. **Movies Watched on Sunday:**
+   - They watch half the number of movies on Sunday compared to Saturday.
+   - Number of movies on Sunday = \( \frac{1}{2} \times 4 = 2 \) movies.
+
+3. **Total Movies Watched in One Weekend:**
+   - Total = Saturday + Sunday = 4 + 2 = 6 movies.
+
+4. **Total Movies Watched in 4 Weeks:**
+   - Since they watch movies every weekend, the total number of movies over 4 weeks is:
+   - Total = 6 movies/weekend × 4 weeks = 24 movies.
+
+**Final Answer:** \boxed{24}  -- LABEL: s.#### 24   -- gen_ids: 193 
+#==================
+
+{'accuracy': 1.0}
