@@ -12,10 +12,9 @@ from datasets import load_dataset, Dataset
 import torch
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
-from transformers import Trainer, TrainingArguments, AutoTokenizer
+from transformers import Trainer, TrainingArguments, AutoTokenizer, AutoModelForCausalLM
 #from utils import file_get_contents, file_put_contents
 from modeling import LoopedLM, LightweightThinkingModel
-
 
 def messages_to_prompt(messages):
 	return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
@@ -24,10 +23,10 @@ def preprocess(batch):
 	prompts, labels = [], []
 	for i in range(len(batch["question"])): #Problem, Solution, Answer | question, answer
 		messages = [
-			{"role": "system", "content": "Given math problem, generate final answer. Don't add <think> steps."},
+			{"role": "system", "content": "Given math problem, generate final answer."},
 			{"role": "user", "content": batch["question"][i]}
 		]
-		prompt = messages_to_prompt(messages) #batch["Problem"][i]		
+		prompt = messages_to_prompt(messages)
 		prompts.append(prompt)
 		label = str(batch["answer"][i])
 		labels.append(label)
@@ -77,8 +76,8 @@ if __name__ == "__main__":
 	#tokenizer.truncation_side = 'left'
 	print("tokenizer:", tokenizer.pad_token_id, tokenizer.truncation_side)
 
-	model = LoopedLM.from_pretrained(model_id) #LoopedLM.from_pretrained(model_id)
-	#model.config.pad_token_id = tokenizer.pad_token_id
+	model = AutoModelForCausalLM.from_pretrained(model_id) #LoopedLM.from_pretrained(model_id)
+	#model.config.pad_token_id = tokenizer.pad_token_id	
 
 	# Dataset
 	dataset = load_dataset("openai/gsm8k", "main") #  "Maxwell-Jia/AIME_2024"
@@ -120,4 +119,3 @@ if __name__ == "__main__":
 	)
 		
 	print( trainer.evaluate() )
-

@@ -1,3 +1,7 @@
+# R1 out3
+# thinking_steps=50,   Step2: last_token,  Step3: think_end_token, max_new_tokens=1024
+
+
 tokenizer: 151643 right
 Dataset test sizes: 14
 

@@ -4,20 +4,23 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 
 class LoopedLM(Qwen2ForCausalLM):
 
-	def generate(self, input_ids=None, max_new_tokens=None, thinking_steps=50, **kwargs):
+	def generate(self, input_ids=None, max_new_tokens=None, thinking_steps=10, **kwargs):
 		# Step 1: Prime model with prompt
-		outputs = super().forward(input_ids=input_ids, use_cache=True)
+		outputs = super().forward(input_ids=input_ids, use_cache=True, output_hidden_states=True)
 		past_key_values = outputs.past_key_values        
 		last_token = input_ids[:, -1:]
-		think_start_token = torch.tensor([[151648]], dtype=torch.long, device="cuda")  #220 - space, 151643-pad, 151648-<think>, 151649-</think>
-		think_end_token = torch.tensor([[151649]], dtype=torch.long, device="cuda")  
-
+		think_start_token = torch.tensor([[151648]], dtype=torch.long, device="cuda")  #220 - space, 151643-pad, 151648-<think>
+		think_end_token = torch.tensor([[151649]], dtype=torch.long, device="cuda")  #</think>
+		special_token = torch.tensor([[151649, 198, 334, 19357, 21806, 66963]], dtype=torch.long, device="cuda") #</think>\n**Final Answer:**
+		
 		# Step 2: Run internal loop without generating tokens
-		for _ in range(thinking_steps):
+		for i in range(thinking_steps):
 			outputs = super().forward(
-				input_ids=last_token,  # Continue using cache
+				#input_ids=think_start_token if i==0 else None,
+				inputs_embeds=outputs.hidden_states[-1][:,-1:,:], #if i>0 else None,
 				past_key_values=past_key_values,
-				use_cache=True
+				use_cache=True,
+				output_hidden_states=True
 			)
 			past_key_values = outputs.past_key_values
 			#input_ids = torch.cat([input_ids, special_token], dim=1) #append
@@ -32,25 +35,23 @@ class LoopedLM(Qwen2ForCausalLM):
 		)
 		
 		"""
-
 		generated = []
 		cur_token = think_end_token
-		for _ in range(max_new_tokens):
-			with torch.no_grad():
-				outputs = super().forward(
-					input_ids=cur_token,
-					past_key_values=past_key_values,
-					use_cache=True
-				)
-				logits = outputs.logits[:, -1, :]
-				past_key_values = outputs.past_key_values
+		for _ in range(max_new_tokens):		
+			outputs = super().forward(
+				input_ids=cur_token,
+				past_key_values=past_key_values,
+				use_cache=True
+			)
+			logits = outputs.logits[:, -1, :]
+			past_key_values = outputs.past_key_values
 
-				next_token = torch.argmax(logits, dim=-1, keepdim=True)
-				generated.append(next_token)
-				cur_token = next_token
+			next_token = torch.argmax(logits, dim=-1, keepdim=True)
+			generated.append(next_token)
+			cur_token = next_token
 
-				if next_token.item() == 151643: #tokenizer.eos_token_id:
-					break
+			if next_token.item() == 151643: #tokenizer.eos_token_id:
+				break
 
 		# Decode final output
 		gen_ids = torch.cat(generated, dim=-1)
