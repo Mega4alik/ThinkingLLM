@@ -1,5 +1,5 @@
 # reasoning through looping
-# venv: asr3.12 - US1
+# venv: US1-asr3.12
 
 import json
 import os
@@ -93,7 +93,7 @@ if __name__ == "__main__":
 	print("tokenizer:", tokenizer.pad_token_id, tokenizer.truncation_side)
 	wer_metric = evaluate.load("wer")
 
-	model = AutoModelForCausalLM.from_pretrained(model_id) #LoopedLM.from_pretrained(model_id)
+	model = AutoModelForCausalLM.from_pretrained(model_id) #LoopedLM.from_pretrained(model_id)	
 	model.config.pad_token_id = tokenizer.pad_token_id	
 	# looping L=16/k
 	model.config.num_hidden_layers=4
@@ -105,14 +105,14 @@ if __name__ == "__main__":
 	dataset = dataset.map(preprocess, batched=True)
 	dataset = dataset["test"].train_test_split(test_size=0.01, seed=42)
 	train_dataset, test_dataset = dataset["train"], dataset["test"]
-	print("Dataset test sizes:",  len(test_dataset))
+	print("Dataset train, test sizes:",  len(train_dataset), len(test_dataset))
 
 	# Start training    
 	data_collator = myDataCollator()
 	training_args = TrainingArguments(
 		output_dir='./model_temp',
 		num_train_epochs=3,
-		per_device_train_batch_size=1,
+		per_device_train_batch_size=2,
 		gradient_accumulation_steps=1,
 		#gradient_checkpointing=True, - slows down the training
 		learning_rate=1e-6,
