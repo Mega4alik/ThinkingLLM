@@ -13,6 +13,7 @@ import torch
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 from transformers import Trainer, TrainingArguments, AutoTokenizer, AutoModelForCausalLM, AutoModelForSequenceClassification
+from sklearn.metrics import precision_score, recall_score, f1_score
 
 def messages_to_prompt(messages):
 	return tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=False)
@@ -70,8 +71,43 @@ def get_averaged_layers(layers, k):
 	return new_layers
 	
 
+class OwnTrainer(Trainer):
+	def predict(self, test_dataset=None, ignore_keys=None, metric_key_prefix="eval"):		
+		predictions, labels = [], []
+		eval_dataloader  = self.get_eval_dataloader(test_dataset)
+		for step, inputs in enumerate(eval_dataloader):
+			with torch.no_grad():
+				outputs = self.model(input_ids=inputs['input_ids'])
+				preds = torch.argmax(outputs.logits, dim=-1).cpu().numpy()
+				predictions.extend(preds)
+				labels.extend(inputs["labels"].cpu().numpy())
+		return compute_metrics({"predictions":predictions, "labels":labels})
+		
+
+def compute_metrics(p):	
+	preds, labels = np.array(p["predictions"]), np.array(p["labels"]) #predict, eval
+	# Confusion matrix components
+	TP = np.sum((preds == 1) & (labels == 1))
+	TN = np.sum((preds == 0) & (labels == 0))
+	FP = np.sum((preds == 1) & (labels == 0))
+	FN = np.sum((preds == 0) & (labels == 1))
+
+	# Derived metrics
+	precision = precision_score(labels, preds)
+	recall = recall_score(labels, preds)
+	f1 = f1_score(labels, preds)
+
+	# Output
+	print(f"TP: {TP}, FP: {FP}, TN: {TN}, FN: {FN}")
+	print(f"Precision: {precision:.4f}")
+	print(f"Recall:    {recall:.4f}")
+	print(f"F1 Score:  {f1:.4f}")	
+	return {"eval_accuracy": f1}
+
+
 #==============================================================================================
 if __name__ == "__main__":
+	mode = 2 #1-train, 2-test
 	model_id = "Qwen/Qwen2-0.5B-Instruct" #"deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"  #"meta-llama/Llama-3.2-1B-Instruct"  #"meta-llama/Llama-3.2-1B"
 	tokenizer = AutoTokenizer.from_pretrained(model_id)
 	tokenizer.pad_token = tokenizer.eos_token #'!' #'<|finetune_right_pad_id|>' 
@@ -88,7 +124,7 @@ if __name__ == "__main__":
 		model.model.layers = get_averaged_layers(model.model.layers, 4)
 		#endOf looping
 	else:
-		model = AutoModelForSequenceClassification.from_pretrained("./model_temp/checkpoint-1000")
+		model = AutoModelForSequenceClassification.from_pretrained("./model_temp/checkpoint-4000")
 		#print(model.config);exit()
 
 	# Dataset
@@ -110,7 +146,7 @@ if __name__ == "__main__":
 		learning_rate=1e-6,
 		logging_steps=20,
 		save_steps=500,
-		save_total_limit=3,
+		save_total_limit=2,
 		load_best_model_at_end=True,
 		eval_strategy="steps",
 		eval_steps=500,
@@ -122,15 +158,15 @@ if __name__ == "__main__":
 		#weight_decay=0.01,
 	)
 
-	trainer = Trainer(
+	trainer = OwnTrainer(
 		model=model,
 		data_collator=data_collator,
 		args=training_args,
 		train_dataset=train_dataset,
 		eval_dataset=test_dataset		
 	)
-		
-	trainer.train("./model_temp/checkpoint-1000")
-
+	
+	if mode==1: trainer.train("./model_temp/checkpoint-1000")
+	else: trainer.predict(test_dataset)
 	#print( trainer.evaluate() )
 
