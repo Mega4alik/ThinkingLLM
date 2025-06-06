@@ -1,6 +1,9 @@
+import copy
 import torch
+from torch import nn
 from transformers import AutoTokenizer, AutoModelForCausalLM, Qwen2ForCausalLM, LlamaForCausalLM, PreTrainedModel
 from transformers.modeling_outputs import CausalLMOutputWithPast
+
 
 class LoopedLM(Qwen2ForCausalLM):
 
@@ -131,27 +134,26 @@ class LightweightThinkingModel(Qwen2ForCausalLM): #PreTrainedModel
 		)
 
 
-	"""
-	def generate(self, input_ids=None, max_new_tokens=256, **model_kwargs):
-		# Use base model's generate but with our forward method
-		outputs = super().generate(
-			input_ids=input_ids,
-			max_new_tokens=max_new_tokens,
-			**model_kwargs,
-		)
-		return outputs
-	"""
 
-
-"""
-def create_lightweight_thinking_model(model_path: str, thinking_steps: int = 3):	
-	base_model = AutoModelForCausalLM.from_pretrained(model_path)
-	config = base_model.config
-	
-	return LightweightThinkingModel(
-		config=config,
-		base_model_path=model_path,
-		thinking_steps=thinking_steps
-	)
-"""
 # ./EndOf Lightweight thinking without additional parameters
+
+
+def get_averaged_layers(layers, k):
+	# Number of groups: 4, each with 6 layers
+	new_layers = nn.ModuleList()
+	L = len(layers)//k
+	for i in range(0, len(layers), L):
+		# Get 6 layers to average
+		group = layers[i:i+L]
+		# Deepcopy the first one as the base to hold averaged weights
+		avg_layer = copy.deepcopy(group[0])
+		with torch.no_grad():
+			for name, param in avg_layer.named_parameters():
+				# Sum up corresponding parameters
+				stacked_params = torch.stack([layer.state_dict()[name] for layer in group])
+				avg_param = stacked_params.mean(dim=0)
+				param.copy_(avg_param)
+
+		new_layers.append(avg_layer)
+
+	return new_layers

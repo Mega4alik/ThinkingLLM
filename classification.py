@@ -7,13 +7,13 @@ import numpy as np
 import random
 import time
 import datetime
-import copy
 from datasets import load_dataset, Dataset
 import torch
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 from transformers import Trainer, TrainingArguments, AutoTokenizer, AutoModelForCausalLM, AutoModelForSequenceClassification
 from sklearn.metrics import precision_score, recall_score, f1_score
+from modeling import get_averaged_layers
 
 def messages_to_prompt(messages):
 	return tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=False)
@@ -50,26 +50,7 @@ class myDataCollator:
 		return {"input_ids": input_ids, "labels": labels}
 
 
-def get_averaged_layers(layers, k):
-	# Number of groups: 4, each with 6 layers
-	new_layers = nn.ModuleList()
-	L = len(layers)//k
-	for i in range(0, len(layers), L):
-		# Get 6 layers to average
-		group = layers[i:i+L]
-		# Deepcopy the first one as the base to hold averaged weights
-		avg_layer = copy.deepcopy(group[0])
-		with torch.no_grad():
-			for name, param in avg_layer.named_parameters():
-				# Sum up corresponding parameters
-				stacked_params = torch.stack([layer.state_dict()[name] for layer in group])
-				avg_param = stacked_params.mean(dim=0)
-				param.copy_(avg_param)
 
-		new_layers.append(avg_layer)
-
-	return new_layers
-	
 
 class OwnTrainer(Trainer):
 	def predict(self, test_dataset=None, ignore_keys=None, metric_key_prefix="eval"):		
@@ -113,9 +94,9 @@ if __name__ == "__main__":
 	tokenizer.pad_token = tokenizer.eos_token #'!' #'<|finetune_right_pad_id|>' 
 	tokenizer.pad_token_id = tokenizer.eos_token_id
 	tokenizer.truncation_side = 'left'
-	print("tokenizer:", tokenizer.pad_token_id, tokenizer.truncation_side)	
+	print("tokenizer:", tokenizer.pad_token_id, tokenizer.truncation_side)
 
-	if 1==2: #training start
+	if False: #training first start
 		model = AutoModelForSequenceClassification.from_pretrained(model_id, num_labels=2)
 		model.config.pad_token_id = tokenizer.pad_token_id
 		# looping L=24/4(k)
@@ -124,7 +105,7 @@ if __name__ == "__main__":
 		model.model.layers = get_averaged_layers(model.model.layers, 4)
 		#endOf looping
 	else:
-		model = AutoModelForSequenceClassification.from_pretrained("./model_temp/checkpoint-4000")
+		model = AutoModelForSequenceClassification.from_pretrained("./model_temp/checkpoint-9500")
 		#print(model.config);exit()
 
 	# Dataset
@@ -139,10 +120,9 @@ if __name__ == "__main__":
 	data_collator = myDataCollator()
 	training_args = TrainingArguments(
 		output_dir='./model_temp',
-		num_train_epochs=50,
+		num_train_epochs=10,
 		per_device_train_batch_size=8,
 		gradient_accumulation_steps=1,
-		#gradient_checkpointing=True, - slows down the training
 		learning_rate=1e-6,
 		logging_steps=20,
 		save_steps=500,
@@ -152,10 +132,9 @@ if __name__ == "__main__":
 		eval_steps=500,
 		per_device_eval_batch_size=1,
 		remove_unused_columns=False,
-		max_grad_norm=100.0,  # 🚨 This enables gradient clipping
+		#max_grad_norm=100.0,  #This enables gradient clipping
 		#logging_dir="./logs/",
-		#report_to="tensorboard",
-		#weight_decay=0.01,
+		#report_to="tensorboard",		
 	)
 
 	trainer = OwnTrainer(
@@ -166,7 +145,7 @@ if __name__ == "__main__":
 		eval_dataset=test_dataset		
 	)
 	
-	if mode==1: trainer.train("./model_temp/checkpoint-1000")
+	if mode==1: trainer.train()
 	else: trainer.predict(test_dataset)
 	#print( trainer.evaluate() )
 
