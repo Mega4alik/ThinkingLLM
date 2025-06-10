@@ -20,31 +20,18 @@ from modeling import get_averaged_layers
 def messages_to_prompt(messages):
 	return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
-def preprocess_gsm(batch):	
+def preprocess(batch): #_svamp
 	prompts, labels = [], []
-	for i in range(len(batch["question"])): #Problem, Solution, Answer | question, answer
-		messages = [
-			{"role": "system", "content": "Given math problem, generate final answer."},
-			{"role": "user", "content": batch["question"][i]}
-		]
-		prompt = messages_to_prompt(messages)
-		prompts.append(prompt)
-		label = str(batch["answer"][i])
-		labels.append(label)
-	return {"prompts":prompts, "labels":labels}
-
-
-def preprocess(batch):	
-	prompts, labels = [], []
-	for i in range(len(batch["Question"])): #Problem, Solution, Answer | question, answer
+	for i in range(len(batch["Question"])):
 		messages = [
 			{"role": "system", "content": "Given math question, generate final answer"},
 			{"role": "user", "content": batch["Body"][i] + "\nQuestion: " + batch["Question"][i]}
 		]
 		prompt = messages_to_prompt(messages)
 		prompts.append(prompt)
-		label = str(batch["Answer"][i]).strip()
-		labels.append(label)		
+		label = str(batch["Answer"][i]).strip()+"<|im_end|>" #<|im_end|>--qwen2
+		labels.append(label)
+		print(prompt, label); exit()
 	return {"prompts":prompts, "labels":labels}
 
 
@@ -53,9 +40,8 @@ class myDataCollator:
         input_ids, labels = [], []
         for sample in features:
             prompt, answer = sample["prompts"], sample["labels"]
-           
-            # Compose full text
-            full = f"{prompt}{answer}<|im_end|>" #<|eot_id|>
+
+            full = f"{prompt}{answer}" # Compose full text
 
             full_tokens = tokenizer(full, truncation=True, max_length=280).input_ids
             prompt_tokens = tokenizer(prompt, truncation=True, max_length=200).input_ids
@@ -78,7 +64,7 @@ class OwnTrainer(Trainer):
 		for step, inputs in enumerate(eval_dataloader):
 			input_ids = inputs['input_ids']
 			with torch.no_grad():
-				generated_ids = self.model.generate(input_ids=input_ids, max_new_tokens=512)
+				generated_ids = self.model.generate(input_ids=input_ids, max_new_tokens=512) #, do_sample=True, num_beams=20
 				generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(input_ids, generated_ids)] #remove input from output
 				compute_metrics( ( generated_ids,  inputs['labels']) )				
 		return {"accuracy": 1.0}
@@ -88,7 +74,7 @@ def compute_metrics(p):
 	generated_ids, labels = p
 	#labels, generated_ids = torch.tensor(p.label_ids), np.argmax(p.predictions, axis=-1) #eval
 	labels[labels == -100] = tokenizer.pad_token_id
-	pred = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+	pred = tokenizer.batch_decode(generated_ids, skip_special_tokens=False)
 	labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 	for p,l in zip(pred, labels):
 		print(p, " -- LABEL:", l, "  -- gen_ids:", len(generated_ids[0]), "\n#==================\n")
@@ -98,36 +84,39 @@ def compute_metrics(p):
 #==============================================================================================
 if __name__ == "__main__":
 	mode = 1 #1-train,2-test
-	model_id = "Qwen/Qwen2-0.5B-Instruct" #"deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"  #"meta-llama/Llama-3.2-1B-Instruct"  #"meta-llama/Llama-3.2-1B"
+	model_id = "Qwen/Qwen2-0.5B-Instruct" #"deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B" # #"meta-llama/Llama-3.2-1B-Instruct"  #"meta-llama/Llama-3.2-1B"
 	tokenizer = AutoTokenizer.from_pretrained(model_id)
 	tokenizer.pad_token = tokenizer.eos_token #'!' #'<|finetune_right_pad_id|>' 
 	tokenizer.pad_token_id = tokenizer.eos_token_id
 	tokenizer.truncation_side = 'left'
-	print("tokenizer:", tokenizer.pad_token_id, tokenizer.truncation_side)	
+	print("tokenizer:", tokenizer.pad_token_id, tokenizer.truncation_side)
 
-	model = AutoModelForCausalLM.from_pretrained(model_id) #LoopedLM.from_pretrained(model_id)	
-	model.config.pad_token_id = tokenizer.pad_token_id
-	# looping L=24/k(4)
-	model.config.num_hidden_layers=4
-	#model.model.layers = model.model.layers[:4]
-	model.model.layers = get_averaged_layers(model.model.layers, 4)
-	#endOf looping
-
-	# Dataset
-	#dataset = load_dataset("openai/gsm8k", "main") #  "Maxwell-Jia/AIME_2024"
-	dataset = load_dataset("ChilleD/SVAMP")
+	# Dataset	
+	dataset = load_dataset("ChilleD/SVAMP") # "mwpt5/MAWPS"
 	dataset = dataset.map(preprocess, batched=True)
-	dataset = dataset["train" if mode==1 else "test"].train_test_split(test_size=0.02 if mode==1 else 0.1, seed=42)
+	dataset = dataset["train"].train_test_split(test_size=0.02 if mode==1 else 0.1, seed=42)
 	train_dataset, test_dataset = dataset["train"], dataset["test"]
 	print(mode, "Dataset train, test sizes:",  len(train_dataset), len(test_dataset))
+
+	# Model 	
+	if True: #first training
+		model = AutoModelForCausalLM.from_pretrained(model_id) #LoopedLM.from_pretrained(model_id)	
+		model.config.pad_token_id = tokenizer.pad_token_id
+		# looping L=24/k(4)
+		model.config.num_hidden_layers=4
+		#model.model.layers = model.model.layers[:4]
+		model.model.layers = get_averaged_layers(model.model.layers, 4)
+		#endOf looping		
+	else:
+		model = AutoModelForCausalLM.from_pretrained("./model_temp/checkpoint-17200")
 	
 	# Start training    
 	data_collator = myDataCollator()
 	training_args = TrainingArguments(
 		output_dir='./model_temp',
-		num_train_epochs=30,
-		per_device_train_batch_size=4,
-		gradient_accumulation_steps=2,		
+		num_train_epochs=100,
+		per_device_train_batch_size=1,
+		gradient_accumulation_steps=1,
 		learning_rate=1e-6,
 		logging_steps=20,
 		save_steps=500,
@@ -135,7 +124,8 @@ if __name__ == "__main__":
 		eval_strategy="steps",
 		eval_steps=500,
 		per_device_eval_batch_size=1,
-		#metric_for_best_model="eval_accuracy",
+		metric_for_best_model="eval_loss",
+		greater_is_better=False,
 		remove_unused_columns=False,
 		#logging_dir="./logs/",
 		#report_to="tensorboard",
@@ -151,7 +141,7 @@ if __name__ == "__main__":
 		#compute_metrics=compute_metrics
 	)
 	
-	if mode==1:	
+	if mode==1:
 		trainer.train()
 	else:
 		print(trainer.predict(test_dataset))
