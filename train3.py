@@ -12,7 +12,7 @@ from datasets import load_dataset, Dataset, load_from_disk
 import torch
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
-from transformers import Trainer, TrainingArguments, AutoTokenizer, AutoModelForCausalLM, AutoModel, AutoModelForSequenceClassification, Qwen2ForSequenceClassification
+from transformers import Trainer, TrainingArguments, AutoTokenizer, AutoModelForCausalLM, AutoModel, AutoModelForSequenceClassification, Qwen2ForSequenceClassification, TrainerCallback
 #from utils import file_get_contents, file_put_contents
 #from modeling import LoopedLM, LightweightThinkingModel
 from modeling import get_averaged_layers
@@ -50,7 +50,7 @@ def preprocess(batch): #_MAWPS sonar emb
 	prompts, labels = [], []
 	for i in range(len(batch["Question"])):
 		messages = [
-			{"role": "system", "content": "Given math question, generate solution"},
+			{"role": "system", "content": "Given math question, generate equation"},
 			{"role": "user", "content": batch["Question"][i]}
 		]
 		prompt = messages_to_prompt(messages)
@@ -81,16 +81,17 @@ class myDataCollator:
 class MyModel(Qwen2ForSequenceClassification):
 	def __init__(self, config):
 		super().__init__(config)
-		self.mse_loss = nn.MSELoss()
+		self.myloss = nn.MSELoss() #nn.CosineSimilarity(dim=-1)
 
 	def forward(self, input_ids=None, attention_mask=None, position_ids=None, labels=None, **kwargs):
 		# Get standard model output (logits = sentence embedding prediction here)
 		outputs = super().forward(input_ids=input_ids, attention_mask=attention_mask) #, **kwargs
-		logits = outputs.logits  # Shape: (batch_size, embedding_dim)		
+		logits = outputs.logits  # Shape: (batch_size, embedding_dim)
 		if labels is not None:
-			loss = self.mse_loss(logits, labels)
+			#l2_reg = torch.norm(logits, p=2, dim=-1).mean()
+			loss = self.myloss(logits, labels) # + 0.01 * l2_reg
 			return {"loss": loss, "logits": logits}
-		else:
+		else:			
 			return logits
 		
 
@@ -106,6 +107,7 @@ class OwnTrainer(Trainer):
 
 def compute_metrics(p):		
 	pred, labels = p
+	#print(pred.dtype, labels.dtype)
 	pred = sonar.decode(pred)
 	labels = sonar.decode(labels)
 	for p,l in zip(pred, labels):
@@ -148,14 +150,14 @@ if __name__ == "__main__":
 		model.model.layers = get_averaged_layers(model.model.layers, 4)		
 		#endOf looping		
 	else:
-		model = MyModel.from_pretrained("./model_temp/checkpoint-3000")
+		model = MyModel.from_pretrained("./model_temp/checkpoint-20500") #loss improving on 20500
 	
 	# Start training    
 	data_collator = myDataCollator()
 	training_args = TrainingArguments(
 		output_dir='./model_temp',
-		num_train_epochs=100,
-		per_device_train_batch_size=16,
+		num_train_epochs=400,
+		per_device_train_batch_size=8,
 		gradient_accumulation_steps=1,
 		learning_rate=1e-6,
 		logging_steps=20,
@@ -167,9 +169,9 @@ if __name__ == "__main__":
 		metric_for_best_model="eval_loss",
 		greater_is_better=False,
 		remove_unused_columns=False,
+		weight_decay=0.01, #instead of L2(pred).mean ?
 		#logging_dir="./logs/",
-		#report_to="tensorboard",
-		#weight_decay=0.01,
+		#report_to="tensorboard",		
 	)
 
 	trainer = OwnTrainer(
@@ -177,12 +179,12 @@ if __name__ == "__main__":
 		data_collator=data_collator,
 		args=training_args,
 		train_dataset=train_dataset,
-		eval_dataset=test_dataset,
+		eval_dataset=test_dataset,		
 		#compute_metrics=compute_metrics
 	)
 	
 	if mode==1:
-		trainer.train("./model_temp/checkpoint-3000")
+		trainer.train("./model_temp/checkpoint-20500")
 	else:
 		sonar = Sonar(2)
 		print(trainer.predict(test_dataset))
