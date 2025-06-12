@@ -117,7 +117,7 @@ def compute_metrics(p):
 
 #==============================================================================================
 if __name__ == "__main__":
-	mode = 1 #1-train,2-test
+	mode = 2 #1-train,2-test
 	model_id = "Qwen/Qwen2-0.5B-Instruct" #"deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B" # #"meta-llama/Llama-3.2-1B-Instruct"  #"meta-llama/Llama-3.2-1B"
 	tokenizer = AutoTokenizer.from_pretrained(model_id)
 	tokenizer.pad_token = tokenizer.eos_token #'!' #'<|finetune_right_pad_id|>' 
@@ -150,7 +150,7 @@ if __name__ == "__main__":
 		model.model.layers = get_averaged_layers(model.model.layers, 4)		
 		#endOf looping		
 	else:
-		model = MyModel.from_pretrained("./model_temp/checkpoint-20500") #loss improving on 20500
+		model = MyModel.from_pretrained("./model_temp/checkpoint-43500") #loss improving on 20500
 	
 	# Start training    
 	data_collator = myDataCollator()
