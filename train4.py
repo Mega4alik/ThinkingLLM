@@ -54,25 +54,16 @@ class myDataCollator:
 		x = tokenizer(answers, return_tensors="pt", padding=True, return_attention_mask=True)
 		token_ids, att_t = x.input_ids, x.attention_mask		
 		
-		# attention_mask, type_ids
-		attention_mask = torch.cat([att_s, att_t], dim=1) #B,S+T,C
-		B, S, T = inputs_embeds.size(0), inputs_embeds.size(1), token_ids.size(1)		
-		type_ids = torch.cat([
-		    torch.zeros((B, S), dtype=torch.long),  # sentences
-		    torch.ones((B, T), dtype=torch.long),   # tokens
-		], dim=1)
-		
-
 		# labels
-		labels = []
+		labels = []		
 		for t_ids in token_ids:
 			#label = [-100] * S + t_ids[1:] + [-100] * (pad_len + 1)  # shift left					
-			label = [-100] * S +   [-100 if v==0 else v for v in t_ids[1:].tolist()]   + [-100]
+			label = [-100] * inputs_embeds.size(1) +   [-100 if v==0 else v for v in t_ids[1:].tolist()]   + [-100]
 			labels.append(label)
 		labels = torch.tensor(labels, dtype=torch.long)
 
-		#print("inputs_embeds", inputs_embeds.shape, "\ntoken_ids", token_ids.shape, "\ntype_ids", type_ids.shape, "\nattention_mask", attention_mask.shape, "\nlabels", labels.shape); exit()
-		out = {'inputs_embeds': inputs_embeds, 'token_ids': token_ids, 'type_ids':type_ids, 'attention_mask':attention_mask, 'labels':labels}
+		#print("inputs_embeds", inputs_embeds, "\ntoken_ids", token_ids, "\ntype_ids", type_ids, "\nattention_mask", attention_mask, "\nlabels", labels); exit()
+		out = {'inputs_embeds': inputs_embeds, 'token_ids': token_ids, 'att_s':att_s, 'att_t':att_t, 'labels':labels}
 		if mode==2: #test
 			out["question"] = [x["question"] for x in batch]
 			out["answers"] = [x["answers"] for x in batch]
@@ -88,15 +79,61 @@ class MyModel(Qwen2ForCausalLM):
 		self.fc1 = nn.Linear(self.embedding_dim, self.hidden_dim)
 	
 	def trans(self, inputs_embeds, token_ids, type_ids):
-		x = self.fc1(inputs_embeds) #self.ln1(x) ignoring magnitude
 		tokens_embeds = self.model.embed_tokens(token_ids)
-		x = torch.cat([x, tokens_embeds], dim=1)
+		if inputs_embeds is not None:
+			x = self.fc1(inputs_embeds) #self.ln1(x) ignoring magnitude		
+			x = torch.cat([x, tokens_embeds], dim=1)
+		else:
+			x = tokens_embeds
 		x = x + self.embed_types(type_ids)
 		return x
 
-	def forward(self, inputs_embeds=None, token_ids=None, type_ids=None, attention_mask=None, labels=None, **kwargs):		
+	def forward(self, inputs_embeds=None, token_ids=None, att_s=None, att_t=None, labels=None, **kwargs):
+		# attention_mask, type_ids
+		#print("\n\nforward. inputs_embeds", inputs_embeds, "\ntoken_ids", token_ids, "\natt_s", att_s, "\natt_t", att_t)
+		if inputs_embeds is not None:
+			attention_mask = torch.cat([att_s, att_t], dim=1)   #B,S+T,C
+			B, S, T = inputs_embeds.size(0), inputs_embeds.size(1), token_ids.size(1)		
+			type_ids = torch.cat([
+			    torch.zeros((B, S), dtype=torch.long),  # sentences
+			    torch.ones((B, T), dtype=torch.long),   # tokens
+			], dim=1).to(device)
+		else:
+			attention_mask = att_t
+			B, T = token_ids.size(0), token_ids.size(1)
+			type_ids = torch.ones((B, T), dtype=torch.long, device=device)
+		
 		outputs = super().forward(inputs_embeds=self.trans(inputs_embeds, token_ids, type_ids), attention_mask=attention_mask, labels=labels) #, **kwargs
 		return outputs
+
+
+	def generate(self, inputs_embeds=None, token_ids=None, att_s=None, max_new_tokens=32):
+		cur_token, att_t = token_ids[:, :5], torch.tensor([[True, True, True, True, True]], device=device)
+		outputs = self.forward(inputs_embeds=inputs_embeds, token_ids=cur_token, att_s=att_s, att_t=att_t, use_cache=True)
+		past_key_values = outputs.past_key_values		
+		logits = outputs.logits[:, -1, :]		
+		cur_token = torch.argmax(logits, dim=-1, keepdim=True)
+
+		generated = []
+		for i in range(max_new_tokens):
+			outputs = self.forward(
+				token_ids=cur_token,
+				att_t=att_t,
+				past_key_values=past_key_values,
+				use_cache=True
+			)
+			logits = outputs.logits[:, -1, :]
+			past_key_values = outputs.past_key_values
+			next_token = torch.argmax(logits, dim=-1, keepdim=True)
+			generated.append(next_token)
+			cur_token = next_token
+			if next_token.item() == tokenizer.eos_token_id: #151643
+				break
+
+		gen_ids = torch.cat(generated, dim=-1)
+		return gen_ids
+
+
 
 
 class OwnTrainer(Trainer):
@@ -104,8 +141,10 @@ class OwnTrainer(Trainer):
 		eval_dataloader  = self.get_eval_dataloader(test_dataset)
 		for step, inputs in enumerate(eval_dataloader):			
 			with torch.no_grad():
-				preds = self.model(inputs_embeds=inputs['inputs_embeds'], attention_mask=inputs['attention_mask'])
-				compute_metrics( (preds, inputs['answers'], inputs['question']) )
+				preds = self.model.generate(inputs_embeds=inputs['inputs_embeds'], token_ids=inputs['token_ids'], att_s=inputs['att_s'])
+				preds = tokenizer.batch_decode(preds)
+				print(preds)
+				#compute_metrics( (preds, inputs['answers'], inputs['question']) )
 		return {"accuracy": 1.0}
 
 
@@ -119,7 +158,8 @@ def compute_metrics(p):
 
 #==============================================================================================
 if __name__ == "__main__":
-	mode = 1 #1-train,2-test
+	device = torch.device("cuda")
+	mode = 2 #1-train,2-test
 	model_id = "Qwen/Qwen2-0.5B" #Qwen/Qwen2-0.5B-Instruct | deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B | "meta-llama/Llama-3.2-1B-Instruct" | "meta-llama/Llama-3.2-1B"
 	tokenizer = AutoTokenizer.from_pretrained(model_id)	
 	
@@ -141,13 +181,13 @@ if __name__ == "__main__":
 	print(mode, "Dataset train, test sizes:",  len(train_dataset), len(test_dataset))
 	
 	# Model
-	if True: #first training
+	if False: #first training
 		model = MyModel.from_pretrained(model_id) #, torch_dtype=torch.float16
 		model.config.num_hidden_layers=12
 		model.model.layers = get_averaged_layers(model.model.layers, 12) #model.model.layers[:4]
 		#print(model, model.config); exit()
 	else:
-		model = MyModel.from_pretrained("./model_temp/checkpoint-")
+		model = MyModel.from_pretrained("./model_temp/checkpoint-110000")
 	
 	# Start training
 	data_collator = myDataCollator()
@@ -185,6 +225,5 @@ if __name__ == "__main__":
 	if mode==1:
 		trainer.train() #"./model_temp/checkpoint-150"
 	else:
-		sonar = Sonar(2)
 		print(trainer.predict(test_dataset))
 
