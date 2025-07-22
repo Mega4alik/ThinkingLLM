@@ -2,12 +2,8 @@
 # [semb1, semb2, t1, t2, t3] -> [t2,t3,t4]
 # venv: US1-asr3.12
 
-import json
-import os
+import json, os, random, time
 import numpy as np
-import random
-import time
-import datetime
 import evaluate
 from datasets import load_dataset, Dataset, load_from_disk
 import torch
@@ -15,42 +11,8 @@ from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 from transformers import Trainer, TrainingArguments, AutoTokenizer, AutoModelForCausalLM, AutoModel, AutoModelForSequenceClassification, TrainerCallback
 from transformers import Qwen2Model,Qwen2ForCausalLM
+from utils import Sonar, NLP
 from modeling import get_averaged_layers
-
-
-class NLP:
-	def __init__(self):
-		import spacy
-		self.nlp = spacy.load("en_core_web_sm")
-
-	def split_sentences(self, text):
-		doc = self.nlp(text)
-		sentences = [sent.text.strip() for sent in doc.sents]
-		return sentences
-
-
-class Sonar:
-	def __init__(self, mode):
-		from sonar.inference_pipelines.text import TextToEmbeddingModelPipeline, EmbeddingToTextModelPipeline
-		if mode==1 or mode==3:
-			self.t2vec_model = TextToEmbeddingModelPipeline(encoder="text_sonar_basic_encoder", tokenizer="text_sonar_basic_encoder", device=torch.device("cuda"))
-		if mode==2 or mode==3:
-			self.vec2text_model = EmbeddingToTextModelPipeline(decoder="text_sonar_basic_decoder", tokenizer="text_sonar_basic_encoder", device=torch.device("cuda"))
-		print("Sonar initialized")
-
-	def delete(self):
-		del self.t2vec_model #, self.vec2text_model
-		torch.cuda.empty_cache()		
-
-	def encode(self, sentences):
-		#sentences = ["Zachary did 46 push-ups and 58 crunches in gym class today. David did 38 more push-ups but 62 less crunches than zachary. How many more crunches than push-ups did Zachary do?", "N_02 / ( N_00 + N_01 + N_02 ) * 100.0"]
-		embeddings = self.t2vec_model.predict(sentences, source_lang="eng_Latn")
-		return embeddings
-
-	def decode(self, embeddings):
-		reconstructed = self.vec2text_model.predict(embeddings, target_lang="eng_Latn", max_seq_len=512)
-		return reconstructed
-
 
 def preprocess(batch):
 	sentences, answers, questions = [], [], []
@@ -169,10 +131,10 @@ if __name__ == "__main__":
 		dataset = dataset.map(preprocess, batched=True, batch_size=8, num_proc=1, load_from_cache_file=False, keep_in_memory=True)
 		print("preprocess finished")
 		dataset = dataset.map(postprocess)
-		dataset.save_to_disk("./temp/narrativeqa_dataset")
+		dataset.save_to_disk("./temp/narrativeqa_??")
 		sonar.delete(); exit()
 	else:
-		dataset = load_from_disk("./temp/narrativeqa_dataset")
+		dataset = load_from_disk("./temp/narrativeqa_train_20k")
 	
 	dataset = dataset.train_test_split(test_size=0.01, seed=42)
 	train_dataset, test_dataset = dataset["train"], dataset["test"]
