@@ -41,23 +41,26 @@ class myDataCollator:
 	def __init__(self):
 		self.pad_value = 0.0
 
+	def apply_template(self, question, answer):
+		return f"\n<|im_start|>user\n{question}<|im_end|>\n<|im_start|>assistant\n{answer}<|im_end|>"
+
 	def __call__(self, batch):
 		# sentences
-		inputs_embeds = [ torch.tensor(x['sentences_emb'] + [x['question_emb']]) for x in batch]		
+		inputs_embeds = [torch.tensor(x['sentences_emb']) for x in batch] # + [x['question_emb']]
 		att_s = [ torch.ones(x.size(0))  for x in inputs_embeds]
 		att_s = pad_sequence(att_s, batch_first=True, padding_value=0)
 		att_s = att_s.ne(0) #B,S
 		inputs_embeds = pad_sequence(inputs_embeds, batch_first=True, padding_value=self.pad_value) #B,S,C
 		
 		# tokens
-		answers = ["\nassistant\n"+random.choice(x['answers']) for x in batch]
-		x = tokenizer(answers, return_tensors="pt", padding=True, return_attention_mask=True)
-		token_ids, att_t = x.input_ids, x.attention_mask		
+		tokens = [self.apply_template(x['question'], random.choice(x['answers'])) for x in batch]
+		x = tokenizer(tokens, return_tensors="pt", padding=True, return_attention_mask=True)
+		token_ids, att_t = x.input_ids, x.attention_mask
 		
 		# labels
-		labels = []		
+		labels = []
 		for t_ids in token_ids:
-			#label = [-100] * S + t_ids[1:] + [-100] * (pad_len + 1)  # shift left					
+			#label = [-100] * S + t_ids[1:] + [-100] * (pad_len + 1)  # shift left
 			label = [-100] * inputs_embeds.size(1) +   [-100 if v==0 else v for v in t_ids[1:].tolist()]   + [-100]
 			labels.append(label)
 		labels = torch.tensor(labels, dtype=torch.long)
@@ -76,45 +79,44 @@ class MyModel(Qwen2ForCausalLM):
 		self.embedding_dim = 1024 #sonar:1024
 		self.hidden_dim = 896 #qwen:896
 		self.embed_types = nn.Embedding(2, self.hidden_dim) #number of types, hidden_dim
+		self.ln1 = nn.LayerNorm(self.embedding_dim)
 		self.fc1 = nn.Linear(self.embedding_dim, self.hidden_dim)
 	
-	def trans(self, inputs_embeds, token_ids, type_ids):
+	def trans(self, inputs_embeds, token_ids):
 		tokens_embeds = self.model.embed_tokens(token_ids)
 		if inputs_embeds is not None:
-			x = self.fc1(inputs_embeds) #self.ln1(x) ignoring magnitude		
+			x = self.fc1(self.ln1(inputs_embeds)) #normalizing and ignoring magnitude
 			x = torch.cat([x, tokens_embeds], dim=1)
-		else:
-			x = tokens_embeds
-		x = x + self.embed_types(type_ids)
-		return x
-
-	def forward(self, inputs_embeds=None, token_ids=None, att_s=None, att_t=None, labels=None, **kwargs):
-		# attention_mask, type_ids
-		#print("\n\nforward. inputs_embeds", inputs_embeds, "\ntoken_ids", token_ids, "\natt_s", att_s, "\natt_t", att_t)
-		if inputs_embeds is not None:
-			attention_mask = torch.cat([att_s, att_t], dim=1)   #B,S+T,C
-			B, S, T = inputs_embeds.size(0), inputs_embeds.size(1), token_ids.size(1)		
+			B, S, T = inputs_embeds.size(0), inputs_embeds.size(1), token_ids.size(1)
 			type_ids = torch.cat([
 			    torch.zeros((B, S), dtype=torch.long),  # sentences
 			    torch.ones((B, T), dtype=torch.long),   # tokens
-			], dim=1).to(device)
+			], dim=1).to(device)			
 		else:
-			attention_mask = att_t
-			B, T = token_ids.size(0), token_ids.size(1)
-			type_ids = torch.ones((B, T), dtype=torch.long, device=device)
-		
-		outputs = super().forward(inputs_embeds=self.trans(inputs_embeds, token_ids, type_ids), attention_mask=attention_mask, labels=labels) #, **kwargs
+			x = tokens_embeds
+			type_ids = torch.ones((tokens_embeds.size(0), tokens_embeds.size(1)), dtype=torch.long)
+
+		x = x + self.embed_types(type_ids)
+		return x
+
+	def forward(self, inputs_embeds=None, token_ids=None, att_s=None, att_t=None, labels=None, **kwargs):		
+		#print("\n\nforward. inputs_embeds", inputs_embeds, "\ntoken_ids", token_ids, "\natt_s", att_s, "\natt_t", att_t)		
+		attention_mask = torch.cat([att_s, att_t], dim=1)   #B,S+T,C
+		outputs = super().forward(inputs_embeds=self.trans(inputs_embeds, token_ids), attention_mask=attention_mask, labels=labels) #, **kwargs
 		return outputs
 
-
 	def generate(self, inputs_embeds=None, token_ids=None, att_s=None, max_new_tokens=32):
-		cur_token, att_t = token_ids[:, :5], torch.tensor([[True, True, True, True, True]], device=device)
-		outputs = self.forward(inputs_embeds=inputs_embeds, token_ids=cur_token, att_s=att_s, att_t=att_t, use_cache=True)
-		past_key_values = outputs.past_key_values		
-		logits = outputs.logits[:, -1, :]		
+		token_ids, att_t = token_ids[:, :3], torch.tensor( [[True, True, True]], device=device )
+		attention_mask = torch.cat([att_s, att_t], dim=1).to(device)   #B,S+T,C		
+		outputs = super().forward(inputs_embeds=self.trans(inputs_embeds, token_ids), attention_mask=attention_mask, use_cache=True)
+		past_key_values = outputs.past_key_values
+		logits = outputs.logits[:, -1, :]
 		cur_token = torch.argmax(logits, dim=-1, keepdim=True)
+		return (token_ids, cur_token)
 
-		generated = []
+		#attention_mask = att_t
+		#B, T = token_ids.size(0), token_ids.size(1)
+		#type_ids = torch.ones((B, T), dtype=torch.long, device=device)
 		for i in range(max_new_tokens):
 			outputs = self.forward(
 				token_ids=cur_token,
@@ -135,15 +137,15 @@ class MyModel(Qwen2ForCausalLM):
 
 
 
-
 class OwnTrainer(Trainer):
 	def predict(self, test_dataset=None, ignore_keys=None, metric_key_prefix="eval"):
 		eval_dataloader  = self.get_eval_dataloader(test_dataset)
-		for step, inputs in enumerate(eval_dataloader):			
+		for step, inputs in enumerate(eval_dataloader):
 			with torch.no_grad():
-				preds = self.model.generate(inputs_embeds=inputs['inputs_embeds'], token_ids=inputs['token_ids'], att_s=inputs['att_s'])
-				preds = tokenizer.batch_decode(preds)
-				print(preds)
+				token_ids, gen_ids = self.model.generate(inputs_embeds=inputs['inputs_embeds'], token_ids=inputs['token_ids'], att_s=inputs['att_s'])
+				tokens = tokenizer.batch_decode(token_ids)
+				generated = tokenizer.batch_decode(gen_ids)
+				print(tokens, "-----", generated, "ans:", inputs['answers'])
 				#compute_metrics( (preds, inputs['answers'], inputs['question']) )
 		return {"accuracy": 1.0}
 
@@ -159,9 +161,9 @@ def compute_metrics(p):
 #==============================================================================================
 if __name__ == "__main__":
 	device = torch.device("cuda")
-	mode = 2 #1-train,2-test
-	model_id = "Qwen/Qwen2-0.5B" #Qwen/Qwen2-0.5B-Instruct | deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B | "meta-llama/Llama-3.2-1B-Instruct" | "meta-llama/Llama-3.2-1B"
-	tokenizer = AutoTokenizer.from_pretrained(model_id)	
+	mode = 1 #1-train,2-test
+	model_id = "Qwen/Qwen2-0.5B-Instruct" #Qwen/Qwen2-0.5B | Qwen/Qwen2-0.5B-Instruct | deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B | "meta-llama/Llama-3.2-1B-Instruct" | "meta-llama/Llama-3.2-1B"
+	tokenizer = AutoTokenizer.from_pretrained(model_id)
 	
 	# Dataset
 	if False:
@@ -181,13 +183,18 @@ if __name__ == "__main__":
 	print(mode, "Dataset train, test sizes:",  len(train_dataset), len(test_dataset))
 	
 	# Model
-	if False: #first training
+	if True: #first training
 		model = MyModel.from_pretrained(model_id) #, torch_dtype=torch.float16
-		model.config.num_hidden_layers=12
-		model.model.layers = get_averaged_layers(model.model.layers, 12) #model.model.layers[:4]
+		#model.config.num_hidden_layers=12
+		#model.model.layers = get_averaged_layers(model.model.layers, 12) #model.model.layers[:4]
+		# Freeze all layers >= 4
+		for i, layer in enumerate(model.model.layers):
+		    if i >= 4:
+		        for param in layer.parameters():
+		            param.requires_grad = False		
 		#print(model, model.config); exit()
 	else:
-		model = MyModel.from_pretrained("./model_temp/checkpoint-110000")
+		model = MyModel.from_pretrained("./model_temp/checkpoint-")
 	
 	# Start training
 	data_collator = myDataCollator()
