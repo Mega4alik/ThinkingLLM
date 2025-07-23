@@ -11,8 +11,8 @@ from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 from transformers import Trainer, TrainingArguments, AutoTokenizer, AutoModelForCausalLM, AutoModel, AutoModelForSequenceClassification, TrainerCallback
 from transformers import Qwen2Model,Qwen2ForCausalLM
-from utils import Sonar, NLP
-from modeling import get_averaged_layers
+from utils import Sonar, NLP, get_magnitudes
+from modeling import get_averaged_layers, freeze_later_layers
 
 def preprocess(batch):
 	sentences, answers, questions = [], [], []
@@ -42,7 +42,7 @@ class myDataCollator:
 		self.pad_value = 0.0
 
 	def apply_template(self, question, answer):
-		return f"\n<|im_start|>user\n{question}<|im_end|>\n<|im_start|>assistant\n{answer}<|im_end|>"
+		return f"<|im_start|>user\n{question}<|im_end|><|im_start|>assistant\n" + (f"{answer}<|im_end|><|endoftext|>" if mode==1 else "")
 
 	def __call__(self, batch):
 		# sentences
@@ -79,40 +79,47 @@ class MyModel(Qwen2ForCausalLM):
 		self.embedding_dim = 1024 #sonar:1024
 		self.hidden_dim = 896 #qwen:896
 		self.embed_types = nn.Embedding(2, self.hidden_dim) #number of types, hidden_dim
-		self.ln1 = nn.LayerNorm(self.embedding_dim)
+		self.ln1 = nn.LayerNorm(self.hidden_dim)
+		self.ln2 = nn.LayerNorm(self.hidden_dim)
 		self.fc1 = nn.Linear(self.embedding_dim, self.hidden_dim)
 	
 	def trans(self, inputs_embeds, token_ids):
 		tokens_embeds = self.model.embed_tokens(token_ids)
 		if inputs_embeds is not None:
-			x = self.fc1(self.ln1(inputs_embeds)) #normalizing and ignoring magnitude
+			x = self.fc1(inputs_embeds) #self.ln1 normalizing and ignoring magnitude
 			x = torch.cat([x, tokens_embeds], dim=1)
 			B, S, T = inputs_embeds.size(0), inputs_embeds.size(1), token_ids.size(1)
-			type_ids = torch.cat([
-			    torch.zeros((B, S), dtype=torch.long),  # sentences
-			    torch.ones((B, T), dtype=torch.long),   # tokens
-			], dim=1).to(device)			
+			#type_ids = torch.cat([torch.zeros((B, S), dtype=torch.long), torch.ones((B, T), dtype=torch.long)], dim=1).to(device)
 		else:
 			x = tokens_embeds
 			type_ids = torch.ones((tokens_embeds.size(0), tokens_embeds.size(1)), dtype=torch.long)
 
-		x = x + self.embed_types(type_ids)
+		#type_emb = self.embed_types(type_ids)
+		#x = x #+ self.ln2(type_emb)
+		#del type_ids
+		#print("magnitudes:", get_magnitudes([inputs_embeds, tokens_embeds, type_emb])); exit()
 		return x
 
-	def forward(self, inputs_embeds=None, token_ids=None, att_s=None, att_t=None, labels=None, **kwargs):		
+	def forward(self, inputs_embeds=None, token_ids=None, att_s=None, att_t=None, labels=None, **kwargs):
 		#print("\n\nforward. inputs_embeds", inputs_embeds, "\ntoken_ids", token_ids, "\natt_s", att_s, "\natt_t", att_t)		
 		attention_mask = torch.cat([att_s, att_t], dim=1)   #B,S+T,C
 		outputs = super().forward(inputs_embeds=self.trans(inputs_embeds, token_ids), attention_mask=attention_mask, labels=labels) #, **kwargs
 		return outputs
 
 	def generate(self, inputs_embeds=None, token_ids=None, att_s=None, max_new_tokens=32):
-		token_ids, att_t = token_ids[:, :3], torch.tensor( [[True, True, True]], device=device )
-		attention_mask = torch.cat([att_s, att_t], dim=1).to(device)   #B,S+T,C		
-		outputs = super().forward(inputs_embeds=self.trans(inputs_embeds, token_ids), attention_mask=attention_mask, use_cache=True)
-		past_key_values = outputs.past_key_values
-		logits = outputs.logits[:, -1, :]
-		cur_token = torch.argmax(logits, dim=-1, keepdim=True)
-		return (token_ids, cur_token)
+		generated = []
+		for i in range(max_new_tokens):
+			att_t = torch.tensor( [[True] * token_ids.size(1)], device=device)
+			attention_mask = torch.cat([att_s, att_t], dim=1).to(device) #B,S+T,C
+			outputs = super().forward(inputs_embeds=self.trans(inputs_embeds, token_ids), attention_mask=None, use_cache=True)
+			#past_key_values = outputs.past_key_values
+			logits = outputs.logits[:, -1, :]
+			next_token = torch.argmax(logits, dim=-1, keepdim=True)
+			generated.append(next_token)
+			token_ids = torch.cat([token_ids, next_token], dim=1)
+
+		return (token_ids, torch.cat(generated, dim=-1))
+		#=================================
 
 		#attention_mask = att_t
 		#B, T = token_ids.size(0), token_ids.size(1)
@@ -145,7 +152,7 @@ class OwnTrainer(Trainer):
 				token_ids, gen_ids = self.model.generate(inputs_embeds=inputs['inputs_embeds'], token_ids=inputs['token_ids'], att_s=inputs['att_s'])
 				tokens = tokenizer.batch_decode(token_ids)
 				generated = tokenizer.batch_decode(gen_ids)
-				print(tokens, "-----", generated, "ans:", inputs['answers'])
+				print(tokens, "-----", generated, "ans:", inputs['answers'], "\n\n")
 				#compute_metrics( (preds, inputs['answers'], inputs['question']) )
 		return {"accuracy": 1.0}
 
@@ -183,25 +190,22 @@ if __name__ == "__main__":
 	print(mode, "Dataset train, test sizes:",  len(train_dataset), len(test_dataset))
 	
 	# Model
-	if True: #first training
+	if mode==1: #first training
 		model = MyModel.from_pretrained(model_id) #, torch_dtype=torch.float16
 		#model.config.num_hidden_layers=12
 		#model.model.layers = get_averaged_layers(model.model.layers, 12) #model.model.layers[:4]
-		# Freeze all layers >= 4
-		for i, layer in enumerate(model.model.layers):
-		    if i >= 4:
-		        for param in layer.parameters():
-		            param.requires_grad = False		
+		freeze_later_layers(model.model.layers, 4)
 		#print(model, model.config); exit()
 	else:
-		model = MyModel.from_pretrained("./model_temp/checkpoint-")
+		model = MyModel.from_pretrained("./model_temp/checkpoint-10000")
 	
 	# Start training
+	print("starting", "Traininig" if mode==1 else "Testing")
 	data_collator = myDataCollator()
 	training_args = TrainingArguments(
 		output_dir='./model_temp',
 		num_train_epochs=100,
-		per_device_train_batch_size=8,
+		per_device_train_batch_size=4,
 		gradient_accumulation_steps=1,
 		learning_rate=1e-6,
 		logging_steps=20,
@@ -215,7 +219,7 @@ if __name__ == "__main__":
 		remove_unused_columns=False,
 		weight_decay=0.01, #instead of L2(pred).mean ?
 		warmup_steps=10000,
-		#fp16=True,
+		fp16=True,
 		#logging_dir="./logs/",
 		#report_to="tensorboard",
 	)
@@ -230,7 +234,7 @@ if __name__ == "__main__":
 	)
 	
 	if mode==1:
-		trainer.train() #"./model_temp/checkpoint-150"
+		trainer.train("./model_temp/checkpoint-10000") #"./model_temp/checkpoint-10000"
 	else:
 		print(trainer.predict(test_dataset))
 

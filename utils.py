@@ -31,3 +31,9 @@ class Sonar:
 	def decode(self, embeddings):
 		reconstructed = self.vec2text_model.predict(embeddings, target_lang="eng_Latn", max_seq_len=512)
 		return reconstructed
+
+
+
+def get_magnitudes(a):
+	import torch
+	return [torch.norm(t, p=2).item() for t in a]

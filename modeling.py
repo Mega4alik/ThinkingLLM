@@ -157,3 +157,15 @@ def get_averaged_layers(layers, k):
 		new_layers.append(avg_layer)
 
 	return new_layers
+
+
+
+def freeze_later_layers(layers, k):
+	# Freeze all layers >= 4
+	for i, layer in enumerate(layers):
+	    if i >= k:
+	        for param in layer.parameters():
+	            param.requires_grad = False	
+	
+
+

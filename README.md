@@ -80,3 +80,5 @@ F1 Score:  0.9773
 TP: 43, FP: 0, TN: 45, FN: 2; Precision:1.0000; Recall:0.9556; F1 Score:0.9773
 
 
+# Train4 ([se1, se2, ..., t1, t2] -> [t3,t4,t5])
+## m1. Qwen/Qwen2-0.5B-Instruct freeze_later_layers(4), no layers norms, no type embedding. Input: [se1, se2, prompt(question, answer).tokens]
