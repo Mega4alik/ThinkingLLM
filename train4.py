@@ -11,8 +11,9 @@ from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 from transformers import Trainer, TrainingArguments, AutoTokenizer, AutoModelForCausalLM, AutoModel, AutoModelForSequenceClassification, TrainerCallback
 from transformers import Qwen2Model,Qwen2ForCausalLM
+from transformers.models.qwen2.modeling_qwen2 import Qwen2RMSNorm
 from utils import Sonar, NLP, get_magnitudes
-from modeling import get_averaged_layers, freeze_later_layers
+from modeling import get_averaged_layers, freeze_some_layers
 
 def preprocess(batch):
 	sentences, answers, questions = [], [], []
@@ -42,7 +43,7 @@ class myDataCollator:
 		self.pad_value = 0.0
 
 	def apply_template(self, question, answer):
-		return f"<|im_start|>user\n{question}<|im_end|><|im_start|>assistant\n" + (f"{answer}<|im_end|><|endoftext|>" if mode==1 else "")
+		return f"<|im_start|>user\n{question}<|im_end|><|im_start|>assistant" + (f"\n{answer}<|im_end|>" if mode==1 else "") #<|endoftext|>?
 
 	def __call__(self, batch):
 		# sentences
@@ -79,25 +80,25 @@ class MyModel(Qwen2ForCausalLM):
 		self.embedding_dim = 1024 #sonar:1024
 		self.hidden_dim = 896 #qwen:896
 		self.embed_types = nn.Embedding(2, self.hidden_dim) #number of types, hidden_dim
-		self.ln1 = nn.LayerNorm(self.hidden_dim)
-		self.ln2 = nn.LayerNorm(self.hidden_dim)
+		self.ln1 = Qwen2RMSNorm(self.embedding_dim) #nn.LayerNorm
+		self.ln2 = Qwen2RMSNorm(self.hidden_dim)
 		self.fc1 = nn.Linear(self.embedding_dim, self.hidden_dim)
 	
 	def trans(self, inputs_embeds, token_ids):
 		tokens_embeds = self.model.embed_tokens(token_ids)
 		if inputs_embeds is not None:
-			x = self.fc1(inputs_embeds) #self.ln1 normalizing and ignoring magnitude
-			x = torch.cat([x, tokens_embeds], dim=1)
+			inputs_embeds = self.fc1(self.ln1(inputs_embeds))
+			x = torch.cat([inputs_embeds, self.ln2(tokens_embeds)], dim=1)
 			B, S, T = inputs_embeds.size(0), inputs_embeds.size(1), token_ids.size(1)
-			#type_ids = torch.cat([torch.zeros((B, S), dtype=torch.long), torch.ones((B, T), dtype=torch.long)], dim=1).to(device)
-		else:
-			x = tokens_embeds
-			type_ids = torch.ones((tokens_embeds.size(0), tokens_embeds.size(1)), dtype=torch.long)
+			type_ids = torch.cat([torch.zeros((B, S), dtype=torch.long), torch.ones((B, T), dtype=torch.long)], dim=1).to(device)
+		else: #not considering this case yet
+			pass
+			#x = tokens_embeds
+			#type_ids = torch.ones((tokens_embeds.size(0), tokens_embeds.size(1)), dtype=torch.long)
 
-		#type_emb = self.embed_types(type_ids)
-		#x = x #+ self.ln2(type_emb)
-		#del type_ids
-		#print("magnitudes:", get_magnitudes([inputs_embeds, tokens_embeds, type_emb])); exit()
+		type_embeds = self.embed_types(type_ids)
+		x = x + type_embeds
+		#print("magnitudes:", get_magnitudes([inputs_embeds, tokens_embeds, type_embeds])); exit()
 		return x
 
 	def forward(self, inputs_embeds=None, token_ids=None, att_s=None, att_t=None, labels=None, **kwargs):
@@ -106,7 +107,7 @@ class MyModel(Qwen2ForCausalLM):
 		outputs = super().forward(inputs_embeds=self.trans(inputs_embeds, token_ids), attention_mask=attention_mask, labels=labels) #, **kwargs
 		return outputs
 
-	def generate(self, inputs_embeds=None, token_ids=None, att_s=None, max_new_tokens=32):
+	def generate(self, inputs_embeds=None, token_ids=None, att_s=None, max_new_tokens=32): #primitive version without caching		
 		generated = []
 		for i in range(max_new_tokens):
 			att_t = torch.tensor( [[True] * token_ids.size(1)], device=device)
@@ -116,14 +117,14 @@ class MyModel(Qwen2ForCausalLM):
 			logits = outputs.logits[:, -1, :]
 			next_token = torch.argmax(logits, dim=-1, keepdim=True)
 			generated.append(next_token)
+			if next_token.item() == tokenizer.eos_token_id: break #15164
 			token_ids = torch.cat([token_ids, next_token], dim=1)
+		
+		return torch.cat(generated, dim=-1)
 
-		return (token_ids, torch.cat(generated, dim=-1))
-		#=================================
 
-		#attention_mask = att_t
-		#B, T = token_ids.size(0), token_ids.size(1)
-		#type_ids = torch.ones((B, T), dtype=torch.long, device=device)
+	def generate2(self, inputs_embeds=None, token_ids=None, att_s=None, max_new_tokens=32):
+		#attention_mask = att_t		
 		for i in range(max_new_tokens):
 			outputs = self.forward(
 				token_ids=cur_token,
@@ -136,12 +137,9 @@ class MyModel(Qwen2ForCausalLM):
 			next_token = torch.argmax(logits, dim=-1, keepdim=True)
 			generated.append(next_token)
 			cur_token = next_token
-			if next_token.item() == tokenizer.eos_token_id: #151643
-				break
-
+			if next_token.item() == tokenizer.eos_token_id: break #15164
 		gen_ids = torch.cat(generated, dim=-1)
 		return gen_ids
-
 
 
 class OwnTrainer(Trainer):
@@ -149,10 +147,9 @@ class OwnTrainer(Trainer):
 		eval_dataloader  = self.get_eval_dataloader(test_dataset)
 		for step, inputs in enumerate(eval_dataloader):
 			with torch.no_grad():
-				token_ids, gen_ids = self.model.generate(inputs_embeds=inputs['inputs_embeds'], token_ids=inputs['token_ids'], att_s=inputs['att_s'])
-				tokens = tokenizer.batch_decode(token_ids)
+				gen_ids = self.model.generate(inputs_embeds=inputs['inputs_embeds'], token_ids=inputs['token_ids'], att_s=inputs['att_s'])				
 				generated = tokenizer.batch_decode(gen_ids)
-				print(tokens, "-----", generated, "ans:", inputs['answers'], "\n\n")
+				print(inputs['question'], "-----", generated, "ans:", inputs['answers'], "\n\n")
 				#compute_metrics( (preds, inputs['answers'], inputs['question']) )
 		return {"accuracy": 1.0}
 
@@ -169,7 +166,7 @@ def compute_metrics(p):
 if __name__ == "__main__":
 	device = torch.device("cuda")
 	mode = 1 #1-train,2-test
-	model_id = "Qwen/Qwen2-0.5B-Instruct" #Qwen/Qwen2-0.5B | Qwen/Qwen2-0.5B-Instruct | deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B | "meta-llama/Llama-3.2-1B-Instruct" | "meta-llama/Llama-3.2-1B"
+	model_id = "Qwen/Qwen2-0.5B" #Qwen/Qwen2-0.5B | Qwen/Qwen2-0.5B-Instruct | deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B | "meta-llama/Llama-3.2-1B-Instruct" | "meta-llama/Llama-3.2-1B"
 	tokenizer = AutoTokenizer.from_pretrained(model_id)
 	
 	# Dataset
@@ -194,10 +191,10 @@ if __name__ == "__main__":
 		model = MyModel.from_pretrained(model_id) #, torch_dtype=torch.float16
 		#model.config.num_hidden_layers=12
 		#model.model.layers = get_averaged_layers(model.model.layers, 12) #model.model.layers[:4]
-		freeze_later_layers(model.model.layers, 4)
+		freeze_some_layers(model.model.layers, 2, 4)
 		#print(model, model.config); exit()
 	else:
-		model = MyModel.from_pretrained("./model_temp/checkpoint-10000")
+		model = MyModel.from_pretrained("./model_temp/checkpoint-5000")
 	
 	# Start training
 	print("starting", "Traininig" if mode==1 else "Testing")
@@ -210,16 +207,16 @@ if __name__ == "__main__":
 		learning_rate=1e-6,
 		logging_steps=20,
 		save_steps=5000,
-		save_total_limit=5,
+		save_total_limit=2,
 		eval_strategy="steps",
 		eval_steps=5000,
 		per_device_eval_batch_size=1,
-		#metric_for_best_model="eval_loss",
+		metric_for_best_model="eval_loss",
 		greater_is_better=False,
 		remove_unused_columns=False,
 		weight_decay=0.01, #instead of L2(pred).mean ?
 		warmup_steps=10000,
-		fp16=True,
+		#fp16=True,
 		#logging_dir="./logs/",
 		#report_to="tensorboard",
 	)
@@ -234,7 +231,7 @@ if __name__ == "__main__":
 	)
 	
 	if mode==1:
-		trainer.train("./model_temp/checkpoint-10000") #"./model_temp/checkpoint-10000"
+		trainer.train() #"./model_temp/checkpoint-10000"
 	else:
 		print(trainer.predict(test_dataset))
 

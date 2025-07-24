@@ -160,12 +160,14 @@ def get_averaged_layers(layers, k):
 
 
 
-def freeze_later_layers(layers, k):
-	# Freeze all layers >= 4
+def freeze_some_layers(layers, left, right):
 	for i, layer in enumerate(layers):
-	    if i >= k:
+	    if i < left or i >= len(layers) - right:
 	        for param in layer.parameters():
-	            param.requires_grad = False	
-	
+	            param.requires_grad = True
+	    else:
+	        for param in layer.parameters():
+	            param.requires_grad = False
+		
 
 
