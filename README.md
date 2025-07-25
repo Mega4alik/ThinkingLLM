@@ -81,8 +81,16 @@ TP: 43, FP: 0, TN: 45, FN: 2; Precision:1.0000; Recall:0.9556; F1 Score:0.9773
 
 
 # Train4 ([se1, se2, ..., t1, t2] -> [t3,t4,t5])
-## m1. Qwen/Qwen2-0.5B-Instruct freeze_later_layers(4), no layers norms, no type embedding. Input: [se1, se2, prompt(question, answer).tokens]
-## m2. Qwen/Qwen2-0.5B freeze_some_layer(left=2, right=4), 
-	 x = cat(ln1(inputs_embeds) + ln2(tokens_embeds)) + type_embeds where ln1 and ln2 are Qwen2RMSNorm
+## m1. Sonar emb, Qwen/Qwen2-0.5B-Instruct freeze_later_layers(4), no layers norms, no type embedding. Input: [se1, se2, prompt(question, answer).tokens]
+## m2. as m1, Qwen/Qwen2-0.5B freeze_some_layer(left=2, right=4), 
+	 x = cat(ln1(inputs_embeds), ln2(tokens_embeds)) + type_embeds where ln1 and ln2 are Qwen2RMSNorm 	 
+LABELS were incorrect!!!! because padded part of tokens were part of labels
+
+## m3. JinaAI emb, Qwen/Qwen2-0.5B-Instruct, freeze_some_layers(left=6, right=2)
+	x = cat[fc1(inputs_embeds), tokens_embeds] + type_embeds, predicting only answer (labels only for answer, -100 otherwise)
+
+
+	
+
 
 

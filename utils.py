@@ -33,7 +33,18 @@ class Sonar:
 		return reconstructed
 
 
+class JinaAI:
+	def __init__(self):
+		from transformers import AutoModel
+		self.model = AutoModel.from_pretrained("jinaai/jina-embeddings-v3", trust_remote_code=True)
+		self.model.eval()
+		self.model.cuda()
+
+	def encode(self, sentences, isq=False):
+		return self.model.encode(sentences, task="retrieval.query" if isq==True else "retrieval.passage")
+
+
 
 def get_magnitudes(a):
 	import torch
-	return [torch.norm(t, p=2).item() for t in a]
+	return [(torch.norm(t, p=2).item(), t.min().item(), t.max().item()) for t in a]
