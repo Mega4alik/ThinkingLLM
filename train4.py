@@ -5,7 +5,7 @@
 import json, os, random, time
 import numpy as np
 import evaluate
-from datasets import load_dataset, Dataset, load_from_disk
+from datasets import load_dataset, Dataset, load_from_disk, concatenate_datasets
 import torch
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
@@ -46,7 +46,7 @@ def find_subsequence(sequence, subseq):
 	return -1
 
 
-class myDataCollator:
+class FTDataCollator:
 	def __init__(self):
 		self.pad_value = 0.0
 
@@ -84,6 +84,39 @@ class myDataCollator:
 		return out
 
 
+class PTDataCollator:
+	def __init__(self):
+		self.pad_value = 0.0
+
+	def apply_template(self, sentences):
+		return f"<|im_start|>" + (f"{" ".join(sentences)}<|im_end|>" if mode==1 else "")
+
+	def __call__(self, batch):		
+		for x in batch: x["idx"] = random.randrange( len(x["sentences"])-1)
+
+		inputs_embeds = [torch.tensor( x['sentences_emb'][x['idx']:x['idx']+2] ) for x in batch] # + [x['question_emb']]
+		att_s = [ torch.ones(x.size(0))  for x in inputs_embeds]
+		att_s = pad_sequence(att_s, batch_first=True, padding_value=0)
+		att_s = att_s.ne(0) #B,S
+		inputs_embeds = pad_sequence(inputs_embeds, batch_first=True, padding_value=self.pad_value) #B,S,C
+		
+		# tokens
+		st = [ self.apply_template(x['sentences'][x['idx']:x['idx']+2]) for x in batch]
+		x = tokenizer(st, return_tensors="pt", padding=True, truncation=True, max_length=40, return_attention_mask=True)
+		token_ids, att_t = x.input_ids, x.attention_mask
+		
+		# labels
+		labels = []
+		for t_ids in token_ids:
+			label = [-100] * inputs_embeds.size(1) +  [-100 if v==tokenizer.pad_token_id else v for v in t_ids[1:].tolist()] + [-100]
+			#print(t_ids, label[inputs_embeds.size(1):], att_t[len(labels)], "\n")
+			labels.append(label)
+		labels = torch.tensor(labels, dtype=torch.long)
+
+		#print("inputs_embeds", inputs_embeds, "\ntoken_ids", token_ids,"\natt_t", att_t, "\nlabels", labels); exit()
+		out = {'inputs_embeds': inputs_embeds, 'token_ids': token_ids, 'att_s':att_s, 'att_t':att_t, 'labels':labels}
+		return out
+
 
 
 class MyModel(Qwen2ForCausalLM):
@@ -95,13 +128,6 @@ class MyModel(Qwen2ForCausalLM):
 		#self.ln1 = Qwen2RMSNorm(self.embedding_dim) #nn.LayerNorm
 		#self.ln2 = Qwen2RMSNorm(self.hidden_dim)
 		self.fc1 = nn.Linear(self.embedding_dim, self.hidden_dim)
-		"""
-		self.sent_proj = nn.Sequential(
-			nn.Linear(in_dim, self.hidden_dim * 2),
-			nn.GELU(),
-			nn.Linear(self.hidden_dim * 2, self.hidden_dim)
-		)
-		"""
 	
 	def trans(self, inputs_embeds, token_ids):
 		tokens_embeds = self.model.embed_tokens(token_ids)
@@ -185,23 +211,24 @@ def compute_metrics(p):
 if __name__ == "__main__":
 	device = torch.device("cuda")
 	mode = 1 #1-train,2-test
-	model_id = "Qwen/Qwen2-0.5B-Instruct" #Qwen/Qwen2-0.5B | Qwen/Qwen2-0.5B-Instruct | deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B | "meta-llama/Llama-3.2-1B-Instruct" | "meta-llama/Llama-3.2-1B"
+	model_id = "Qwen/Qwen2-0.5B" #Qwen/Qwen2-0.5B | Qwen/Qwen2-0.5B-Instruct | deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B | "meta-llama/Llama-3.2-1B-Instruct" | "meta-llama/Llama-3.2-1B"
 	tokenizer = AutoTokenizer.from_pretrained(model_id)
 	
 	# Dataset
 	if False:
 		embedding_model = JinaAI()  #Sonar(1)
 		nlp = NLP()
-		dataset = load_dataset("deepmind/narrativeqa", split="train[:20000]") #"mwpt5/MAWPS" | "ChilleD/SVAMP"
+		dataset = load_dataset("deepmind/narrativeqa", split="train[20000:]") #"mwpt5/MAWPS" | "ChilleD/SVAMP"
 		dataset = dataset.map(preprocess, batched=True, batch_size=12)
 		print("preprocess finished")
 		dataset = dataset.map(postprocess)
-		dataset.save_to_disk("./temp/narrativeqa_train_20k")
+		dataset.save_to_disk("./temp/narrativeqa_train_20k_2")
 		exit()
 	else:
-		dataset = load_from_disk("./temp/narrativeqa_train_20k")
+		#dataset = load_from_disk("./temp/narrativeqa_train_20k")
+		dataset = concatenate_datasets([ load_from_disk(fname) for fname in ["./temp/narrativeqa_train_20k", "./temp/narrativeqa_train_20k_2"] ])
 	
-	dataset = dataset.train_test_split(test_size=0.01, seed=42)
+	dataset = dataset.train_test_split(test_size=0.005, seed=42)
 	train_dataset, test_dataset = dataset["train"], dataset["test"]
 	print(mode, "Dataset train, test sizes:",  len(train_dataset), len(test_dataset))
 	
@@ -210,17 +237,17 @@ if __name__ == "__main__":
 		model = MyModel.from_pretrained(model_id) #, torch_dtype=torch.float16
 		#model.config.num_hidden_layers=12
 		#model.model.layers = get_averaged_layers(model.model.layers, 12) #model.model.layers[:4]
-		freeze_some_layers(model.model.layers, 6, 2)
+		freeze_some_layers(model.model.layers, 0, 6)
 		#print(model, model.config); exit()
 	else:
-		model = MyModel.from_pretrained("./model_temp/checkpoint-5000")
+		model = MyModel.from_pretrained("./model_temp/checkpoint-")
 	
 	# Start training
 	print("starting", "Traininig" if mode==1 else "Testing")
-	data_collator = myDataCollator()
+	data_collator = PTDataCollator() #FT/PT
 	training_args = TrainingArguments(
 		output_dir='./model_temp',
-		num_train_epochs=100,
+		num_train_epochs=5,
 		per_device_train_batch_size=4,
 		gradient_accumulation_steps=1,
 		learning_rate=1e-6,
