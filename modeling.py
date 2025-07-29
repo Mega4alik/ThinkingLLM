@@ -171,3 +171,9 @@ def freeze_some_layers(layers, left, right):
 		
 
 
+def find_subsequence(sequence, subseq):	
+	subseq = torch.tensor(subseq)
+	for i in range(len(sequence) - len(subseq) + 1):
+		if torch.equal(sequence[i:i+len(subseq)], subseq):
+			return i
+	return -1

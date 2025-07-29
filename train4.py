@@ -38,13 +38,6 @@ def postprocess(row):
 	return row
 
 
-def find_subsequence(sequence, subseq):
-	subseq = torch.tensor(subseq)
-	for i in range(len(sequence) - len(subseq) + 1):
-		if torch.equal(sequence[i:i+len(subseq)], subseq):
-			return i
-	return -1
-
 
 class FTDataCollator:
 	def __init__(self):
@@ -89,20 +82,20 @@ class PTDataCollator:
 		self.pad_value = 0.0
 
 	def apply_template(self, sentences):
-		return f"<|im_start|>" + (f"{" ".join(sentences)}<|im_end|>" if mode==1 else "")
+		return "<|im_start|>" + (" ".join(sentences) + "<|im_end|>" if mode == 1 else "")
 
 	def __call__(self, batch):		
 		for x in batch: x["idx"] = random.randrange( len(x["sentences"])-1)
 
-		inputs_embeds = [torch.tensor( x['sentences_emb'][x['idx']:x['idx']+2] ) for x in batch] # + [x['question_emb']]
+		inputs_embeds = [torch.tensor( x['sentences_emb'][x['idx']:x['idx']+1] ) for x in batch]
 		att_s = [ torch.ones(x.size(0))  for x in inputs_embeds]
 		att_s = pad_sequence(att_s, batch_first=True, padding_value=0)
 		att_s = att_s.ne(0) #B,S
 		inputs_embeds = pad_sequence(inputs_embeds, batch_first=True, padding_value=self.pad_value) #B,S,C
 		
 		# tokens
-		st = [ self.apply_template(x['sentences'][x['idx']:x['idx']+2]) for x in batch]
-		x = tokenizer(st, return_tensors="pt", padding=True, truncation=True, max_length=40, return_attention_mask=True)
+		st = [ self.apply_template(x['sentences'][x['idx']:x['idx']+1]) for x in batch]
+		x = tokenizer(st, return_tensors="pt", padding=True, truncation=True, max_length=30, return_attention_mask=True)
 		token_ids, att_t = x.input_ids, x.attention_mask
 		
 		# labels
@@ -115,6 +108,8 @@ class PTDataCollator:
 
 		#print("inputs_embeds", inputs_embeds, "\ntoken_ids", token_ids,"\natt_t", att_t, "\nlabels", labels); exit()
 		out = {'inputs_embeds': inputs_embeds, 'token_ids': token_ids, 'att_s':att_s, 'att_t':att_t, 'labels':labels}
+		if mode==2:
+			out["sentences"] = [x['sentences'][x['idx']] for x in batch]
 		return out
 
 
@@ -125,14 +120,18 @@ class MyModel(Qwen2ForCausalLM):
 		self.embedding_dim = 1024 #sonar:1024
 		self.hidden_dim = 896 #qwen:896
 		self.embed_types = nn.Embedding(2, self.hidden_dim) #number of types, hidden_dim
-		#self.ln1 = Qwen2RMSNorm(self.embedding_dim) #nn.LayerNorm
-		#self.ln2 = Qwen2RMSNorm(self.hidden_dim)
-		self.fc1 = nn.Linear(self.embedding_dim, self.hidden_dim)
+		#self.ln1 = nn.LayerNorm(self.embedding_dim) #Qwen2RMSNorm		
+		#self.fc1 = nn.Linear(self.embedding_dim, self.hidden_dim)
+		self.sent_proj = nn.Sequential(
+			nn.Linear(self.embedding_dim, 4864, bias=False),
+			nn.GELU(),
+			nn.Linear(4864, self.hidden_dim, bias=False)
+		)
 	
 	def trans(self, inputs_embeds, token_ids):
 		tokens_embeds = self.model.embed_tokens(token_ids)
 		if inputs_embeds is not None:
-			x = self.fc1(inputs_embeds)
+			x = self.sent_proj(inputs_embeds)
 			x = torch.cat([x, tokens_embeds], dim=1)
 			B, S, T = inputs_embeds.size(0), inputs_embeds.size(1), token_ids.size(1)
 			type_ids = torch.cat([torch.zeros((B, S), dtype=torch.long), torch.ones((B, T), dtype=torch.long)], dim=1).to(device)
@@ -192,19 +191,12 @@ class OwnTrainer(Trainer):
 		eval_dataloader  = self.get_eval_dataloader(test_dataset)
 		for step, inputs in enumerate(eval_dataloader):
 			with torch.no_grad():
-				gen_ids = self.model.generate(inputs_embeds=inputs['inputs_embeds'], token_ids=inputs['token_ids'], att_s=inputs['att_s'])              
+				gen_ids = self.model.generate(inputs_embeds=inputs['inputs_embeds'], token_ids=inputs['token_ids'], att_s=inputs['att_s'])
 				generated = tokenizer.batch_decode(gen_ids)
-				print(inputs['question'], "-----", generated, "ans:", inputs['answers'], "\n\n")
+				print(generated, "ans:", inputs['sentences'], "\n\n")
 				#compute_metrics( (preds, inputs['answers'], inputs['question']) )
 		return {"accuracy": 1.0}
 
-
-def compute_metrics(p):
-	pred, answers, question = p
-	pred = sonar.decode(pred)
-	for p, ans, ques in zip(pred, answers, question):
-		print(p, " -- q", ques, "ans:", ans, "\n#==================\n")
-	return {"eval_accuracy": 1.0}
 
 
 #==============================================================================================
@@ -222,8 +214,7 @@ if __name__ == "__main__":
 		dataset = dataset.map(preprocess, batched=True, batch_size=12)
 		print("preprocess finished")
 		dataset = dataset.map(postprocess)
-		dataset.save_to_disk("./temp/narrativeqa_train_20k_2")
-		exit()
+		dataset.save_to_disk("./temp/narrativeqa_train_20k_2"); exit()		
 	else:
 		#dataset = load_from_disk("./temp/narrativeqa_train_20k")
 		dataset = concatenate_datasets([ load_from_disk(fname) for fname in ["./temp/narrativeqa_train_20k", "./temp/narrativeqa_train_20k_2"] ])
@@ -237,7 +228,7 @@ if __name__ == "__main__":
 		model = MyModel.from_pretrained(model_id) #, torch_dtype=torch.float16
 		#model.config.num_hidden_layers=12
 		#model.model.layers = get_averaged_layers(model.model.layers, 12) #model.model.layers[:4]
-		freeze_some_layers(model.model.layers, 0, 6)
+		freeze_some_layers(model.model.layers, 3, 3)
 		#print(model, model.config); exit()
 	else:
 		model = MyModel.from_pretrained("./model_temp/checkpoint-")
@@ -247,9 +238,9 @@ if __name__ == "__main__":
 	data_collator = PTDataCollator() #FT/PT
 	training_args = TrainingArguments(
 		output_dir='./model_temp',
-		num_train_epochs=5,
-		per_device_train_batch_size=4,
-		gradient_accumulation_steps=1,
+		num_train_epochs=50,
+		per_device_train_batch_size=8,
+		gradient_accumulation_steps=2,
 		learning_rate=1e-6,
 		logging_steps=20,
 		save_steps=5000,
@@ -260,11 +251,11 @@ if __name__ == "__main__":
 		metric_for_best_model="eval_loss",
 		greater_is_better=False,
 		remove_unused_columns=False,
-		weight_decay=0.01, #instead of L2(pred).mean ?
-		#warmup_steps=10000,
-		#fp16=True,
-		#logging_dir="./logs/",
-		#report_to="tensorboard",
+		weight_decay=0.01,
+		warmup_steps=100,
+		#fp16=True,		
+		#disable_tqdm=True,
+		report_to="none" #"tensorboard",
 	)
 
 	trainer = OwnTrainer(
