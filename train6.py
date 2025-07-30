@@ -9,7 +9,7 @@ import torch
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 from transformers import Trainer, TrainingArguments, AutoTokenizer, AutoModelForCausalLM, AutoModel, AutoModelForSequenceClassification, TrainerCallback
-from transformers import Qwen2Model,Qwen2ForCausalLM
+from transformers import Qwen2Model,Qwen2ForCausalLM, LlamaForCausalLM
 from utils import Sonar, NLP, JinaAI, get_magnitudes
 from modeling import get_averaged_layers, freeze_some_layers, find_subsequence
 
@@ -22,7 +22,7 @@ class ConvDataCollator:
 
 	def __call__(self, batch):
 		# conv part - sents
-		out = tokenizer([" ".join(x['sentences']) for x in batch], return_tensors="pt", padding=True, return_attention_mask=True) #B,S
+		out = tokenizer([" ".join(x['sentences']) for x in batch], return_tensors="pt", padding=True, return_attention_mask=True, add_special_tokens=False) #B,S
 		sent_ids, att_s = out.input_ids, out.attention_mask		
 		att_s = att_s.unsqueeze(1).float()  # (B, 1, T)
 		pooled = nn.functional.max_pool1d(att_s, self.kernel_size, stride=self.stride)
@@ -31,13 +31,14 @@ class ConvDataCollator:
 
 		#tokens
 		st = [self.apply_template(x['question'], random.choice(x['answers'])) for x in batch]	
-		out = tokenizer(st, return_tensors="pt", padding=True, return_attention_mask=True)
+		out = tokenizer(st, return_tensors="pt", padding=True, return_attention_mask=True, add_special_tokens=False)
 		token_ids, att_t = out.input_ids, out.attention_mask
 		
 		# labels
 		labels = []
 		for t_ids in token_ids:
 			answer_start_id = find_subsequence(t_ids, [77091, 198]) #assistant\n			
+			assert answer_start_id!=-1
 			label = [-100] * S2 + [-100] * (answer_start_id+1) + [-100 if v==151643 else v for v in t_ids[answer_start_id+1+1:].tolist()] + [-100]
 			#print(t_ids, label[inputs_embeds.size(1):], att_t[len(labels)])
 			labels.append(label)
@@ -56,18 +57,18 @@ class MyModel(Qwen2ForCausalLM):
 		super().__init__(config)		
 		self.hidden_dim = 896 #qwen:896
 		self.kernel_size, self.stride = 3, 3
-		self.embed_types = nn.Embedding(2, self.hidden_dim) #number of types, hidden_dim		
+		self.embed_types = nn.Embedding(2, self.hidden_dim) #number of types, hidden_dim
 		self.conv = nn.Conv1d(
 			in_channels=self.hidden_dim,  # C
 			out_channels=self.hidden_dim, # or change if you want to map to different dim
 			kernel_size=self.kernel_size,
 			stride=self.stride,
 			padding=0
-		)		
+		)
 	
 	def trans(self, inputs_embeds, token_ids):
 		tokens_embeds = self.model.embed_tokens(token_ids)
-		if inputs_embeds is not None:			
+		if inputs_embeds is not None:
 			x = torch.cat([inputs_embeds, tokens_embeds], dim=1)
 			#B, S, T = inputs_embeds.size(0), inputs_embeds.size(1), token_ids.size(1)
 			#type_ids = torch.cat([torch.zeros((B, S), dtype=torch.long), torch.ones((B, T), dtype=torch.long)], dim=1).to(device)
@@ -83,22 +84,32 @@ class MyModel(Qwen2ForCausalLM):
 		x1 = self.model.embed_tokens(sent_ids)
 		x = x1.transpose(1, 2)
 		x = self.conv(x)  # (B, C, T') where T' = (T - 3)//3 + 1
-		inputs_embeds = x.transpose(1, 2)  # back to (B, T', C)
-		print(get_magnitudes([x1, inputs_embeds]), sent_ids.shape); exit()
+		inputs_embeds = x.transpose(1, 2)  # back to (B, T', C)	
+
+		#if torch.isnan(inputs_embeds).any().item(): print(get_magnitudes([x1, inputs_embeds, self.conv.weight]), sent_ids.shape); exit()
 		#print("\nsent_ids", sent_ids.shape, sent_ids, "\ninputs_embeds", inputs_embeds.shape, "att_s", att_s.shape, att_s, "\ntoken_ids", token_ids, "\natt_t", att_t); exit()		
 		attention_mask = torch.cat([att_s, att_t], dim=1)   #B,S+T,C
 		outputs = super().forward(inputs_embeds=self.trans(inputs_embeds, token_ids), attention_mask=attention_mask, labels=labels) #, **kwargs
 		return outputs
 
+
 	def generate(self, sent_ids=None, token_ids=None, att_s=None, max_new_tokens=32): #primitive version without caching       
 		generated = []
 		for i in range(max_new_tokens):
 			att_t = torch.tensor( [[True] * token_ids.size(1)], device=device)
-			attention_mask = torch.cat([att_s, att_t], dim=1).to(device) #B,S+T,C
+			#print(sent_ids.shape, token_ids.shape, token_ids)
 			outputs = self.forward(sent_ids=sent_ids, token_ids=token_ids, att_s=att_s, att_t=att_t)
 			#past_key_values = outputs.past_key_values
+			
+			#argmax
 			logits = outputs.logits[:, -1, :]
 			next_token = torch.argmax(logits, dim=-1, keepdim=True)
+
+			#temperature sampling
+			#temperature = 2.0  # <1.0 = more conservative; >1.0 = more random
+			#probs = nn.functional.softmax(logits / temperature, dim=-1)
+			#next_token = torch.multinomial(probs, num_samples=1)  # [B, 1]
+
 			generated.append(next_token)
 			if next_token.item() == tokenizer.eos_token_id: break #15164
 			token_ids = torch.cat([token_ids, next_token], dim=1)
@@ -106,14 +117,27 @@ class MyModel(Qwen2ForCausalLM):
 		return torch.cat(generated, dim=-1)
 
 
+	def generate2(self, sent_ids=None, token_ids=None, att_s=None, max_new_tokens=32): #temp
+		generated = []
+		token_ids = torch.cat([sent_ids, token_ids], dim=1)
+		for i in range(max_new_tokens):
+			outputs = super().forward(input_ids=token_ids)
+			logits = outputs.logits[:, -1, :]
+			next_token = torch.argmax(logits, dim=-1, keepdim=True)
+			generated.append(next_token)
+			if next_token.item() == tokenizer.eos_token_id: break #15164
+			token_ids = torch.cat([token_ids, next_token], dim=1)
+		return torch.cat(generated, dim=-1)
+
 
 class OwnTrainer(Trainer):
 	def predict(self, test_dataset=None, ignore_keys=None, metric_key_prefix="eval"):
 		eval_dataloader  = self.get_eval_dataloader(test_dataset)
 		for step, inputs in enumerate(eval_dataloader):
 			with torch.no_grad():
-				gen_ids = self.model.generate(sent_ids=inputs['sent_ids'], token_ids=inputs['token_ids'], att_s=inputs['att_s'])
-				generated = tokenizer.batch_decode(gen_ids)
+				gen_ids = self.model.generate2(sent_ids=inputs['sent_ids'], token_ids=inputs['token_ids'], att_s=inputs['att_s'])
+				#input_ids = torch.cat([ inputs['sent_ids'], inputs['token_ids']], dim=1); gen_ids = self.model.generate(input_ids, max_length=input_ids.size(1)+20, pad_token_id=tokenizer.eos_token_id)
+				generated = tokenizer.batch_decode(gen_ids, skip_special_tokens=False)[0]
 				print(generated, "ans:", inputs['answers'], "\n\n")
 				#compute_metrics( (preds, inputs['answers'], inputs['question']) )
 		return {"accuracy": 1.0}
@@ -123,9 +147,10 @@ class OwnTrainer(Trainer):
 #==============================================================================================
 if __name__ == "__main__":	
 	device = torch.device("cuda")
-	mode = 1 #1-train,2-test
+	mode = 2 #1-train,2-test
 	model_id = "Qwen/Qwen2-0.5B-Instruct" #Qwen/Qwen2-0.5B | Qwen/Qwen2-0.5B-Instruct | deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B | "meta-llama/Llama-3.2-1B-Instruct" | "meta-llama/Llama-3.2-1B"
-	tokenizer = AutoTokenizer.from_pretrained(model_id)
+	tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+	tokenizer.pad_token_id = tokenizer.eos_token_id
 	
 	# Dataset
 	if False:
@@ -145,14 +170,17 @@ if __name__ == "__main__":
 	print(mode, "Dataset train, test sizes:",  len(train_dataset), len(test_dataset))
 	
 	# Model
-	if mode==1: #first training
+	if mode==1: #training
 		model = MyModel.from_pretrained(model_id) #, torch_dtype=torch.float16
 		#model.config.num_hidden_layers=12
-		#model.model.layers = get_averaged_layers(model.model.layers, 12) #model.model.layers[:4]
-		freeze_some_layers(model.model.layers, 2, 1)		
-		#print(model, model.config); exit()
+		#model.model.layers = get_averaged_layers(model.model.layers, 12) #model.model.layers[:4]				
+		freeze_some_layers(model.model.layers, 1, 1)
+		model.model.embed_tokens.requires_grad_(False)		
+		#model.conv.weight.data.fill_(0.1)
+		#import math; nn.init.kaiming_uniform_(model.conv.weight, a=math.sqrt(6))
 	else:
-		model = MyModel.from_pretrained("./model_temp/checkpoint-")
+		model = MyModel.from_pretrained(model_id) # "./model_temp/checkpoint-28600"
+		model.eval()
 	
 	# Start training
 	data_collator = ConvDataCollator() #FT/PT
@@ -163,9 +191,9 @@ if __name__ == "__main__":
 		num_train_epochs=50,
 		per_device_train_batch_size=2,
 		gradient_accumulation_steps=2,
-		learning_rate=1e-6,
+		learning_rate=1e-5,
 		logging_steps=20,
-		save_steps=5000,
+		save_steps=200,
 		save_total_limit=2,
 		eval_strategy="steps",
 		eval_steps=5000,

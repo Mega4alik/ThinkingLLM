@@ -47,5 +47,5 @@ class JinaAI:
 
 def get_magnitudes(a):
 	import torch
-	return [(torch.norm(t, p=2).item(), t.min().item(), t.max().item()) for t in a]
+	return [(torch.norm(t, p=2).item(), t.min().item(), t.max().item(), torch.isnan(t).any().item()) for t in a]
 
