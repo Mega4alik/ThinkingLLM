@@ -1,5 +1,5 @@
 # [ CNN(t1, t2 t3), t4, t5,t6,t7] -> [t5,t6,t7]
-# preprocessing is don in train4 
+# preprocessing is done in train4 
 # venv: US1-asr3.12
 
 import json, os, random, time
@@ -10,6 +10,7 @@ from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 from transformers import Trainer, TrainingArguments, AutoTokenizer, AutoModelForCausalLM, AutoModel, AutoModelForSequenceClassification, TrainerCallback
 from transformers import Qwen2Model,Qwen2ForCausalLM, LlamaForCausalLM
+
 from utils import Sonar, NLP, JinaAI, get_magnitudes
 from modeling import get_averaged_layers, freeze_some_layers, find_subsequence
 
@@ -23,7 +24,7 @@ class ConvDataCollator:
 	def __call__(self, batch):
 		# conv part - sents
 		out = tokenizer([" ".join(x['sentences']) for x in batch], return_tensors="pt", padding=True, return_attention_mask=True, add_special_tokens=False) #B,S
-		sent_ids, att_s = out.input_ids, out.attention_mask		
+		sent_ids, att_s = out.input_ids, out.attention_mask
 		att_s = att_s.unsqueeze(1).float()  # (B, 1, T)
 		pooled = nn.functional.max_pool1d(att_s, self.kernel_size, stride=self.stride)
 		att_s = pooled.squeeze(1).bool()  # (B, T')
@@ -37,14 +38,13 @@ class ConvDataCollator:
 		# labels
 		labels = []
 		for t_ids in token_ids:
-			answer_start_id = find_subsequence(t_ids, [77091, 198]) #assistant\n			
+			answer_start_id = find_subsequence(t_ids, [77091, 198]) #assistant\n
 			assert answer_start_id!=-1
 			label = [-100] * S2 + [-100] * (answer_start_id+1) + [-100 if v==151643 else v for v in t_ids[answer_start_id+1+1:].tolist()] + [-100]
 			#print(t_ids, label[inputs_embeds.size(1):], att_t[len(labels)])
 			labels.append(label)
 		labels = torch.tensor(labels, dtype=torch.long)
-
-		#print("inputs_embeds", inputs_embeds, "\ntoken_ids", token_ids,"\natt_t", att_t, "\nlabels", labels); exit()
+		
 		out = {'sent_ids': sent_ids, 'token_ids': token_ids, 'att_s':att_s, 'att_t':att_t, 'labels':labels}
 		if mode==2: #test
 			out["question"] = [x["question"] for x in batch]
@@ -54,7 +54,7 @@ class ConvDataCollator:
 
 class MyModel(Qwen2ForCausalLM):
 	def __init__(self, config):
-		super().__init__(config)		
+		super().__init__(config)
 		self.hidden_dim = 896 #qwen:896
 		self.kernel_size, self.stride = 3, 3
 		self.embed_types = nn.Embedding(2, self.hidden_dim) #number of types, hidden_dim
@@ -70,24 +70,24 @@ class MyModel(Qwen2ForCausalLM):
 		tokens_embeds = self.model.embed_tokens(token_ids)
 		if inputs_embeds is not None:
 			x = torch.cat([inputs_embeds, tokens_embeds], dim=1)
-			#B, S, T = inputs_embeds.size(0), inputs_embeds.size(1), token_ids.size(1)
-			#type_ids = torch.cat([torch.zeros((B, S), dtype=torch.long), torch.ones((B, T), dtype=torch.long)], dim=1).to(device)
+			B, S, T = inputs_embeds.size(0), inputs_embeds.size(1), token_ids.size(1)
+			type_ids = torch.cat([torch.zeros((B, S), dtype=torch.long), torch.ones((B, T), dtype=torch.long)], dim=1).to(device)
 		else: #not considering this case yet
 			pass			
 
-		#type_embeds = self.embed_types(type_ids)
-		#x = x + type_embeds
-		#print("\nmagnitudes:", get_magnitudes([inputs_embeds, tokens_embeds])); exit() #, type_embeds
+		type_embeds = self.embed_types(type_ids)
+		x = x + type_embeds
+		#print("\nmagnitudes:", get_magnitudes([inputs_embeds, tokens_embeds, type_embeds])); exit()
 		return x
 
 	def forward(self, sent_ids=None, token_ids=None, att_s=None, att_t=None, labels=None, **kwargs):
 		x1 = self.model.embed_tokens(sent_ids)
 		x = x1.transpose(1, 2)
 		x = self.conv(x)  # (B, C, T') where T' = (T - 3)//3 + 1
-		inputs_embeds = x.transpose(1, 2)  # back to (B, T', C)	
-
+		inputs_embeds = x.transpose(1, 2)  # back to (B, T', C)
+		
 		#if torch.isnan(inputs_embeds).any().item(): print(get_magnitudes([x1, inputs_embeds, self.conv.weight]), sent_ids.shape); exit()
-		#print("\nsent_ids", sent_ids.shape, sent_ids, "\ninputs_embeds", inputs_embeds.shape, "att_s", att_s.shape, att_s, "\ntoken_ids", token_ids, "\natt_t", att_t); exit()		
+		#print("\nsent_ids", sent_ids.shape, sent_ids, "\ninputs_embeds", inputs_embeds.shape, "att_s", att_s.shape, att_s, "\ntoken_ids", token_ids, "\natt_t", att_t); exit()
 		attention_mask = torch.cat([att_s, att_t], dim=1)   #B,S+T,C
 		outputs = super().forward(inputs_embeds=self.trans(inputs_embeds, token_ids), attention_mask=attention_mask, labels=labels) #, **kwargs
 		return outputs
@@ -147,10 +147,9 @@ class OwnTrainer(Trainer):
 #==============================================================================================
 if __name__ == "__main__":	
 	device = torch.device("cuda")
-	mode = 2 #1-train,2-test
+	mode = 1 #1-train,2-test
 	model_id = "Qwen/Qwen2-0.5B-Instruct" #Qwen/Qwen2-0.5B | Qwen/Qwen2-0.5B-Instruct | deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B | "meta-llama/Llama-3.2-1B-Instruct" | "meta-llama/Llama-3.2-1B"
-	tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-	tokenizer.pad_token_id = tokenizer.eos_token_id
+	tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)	
 	
 	# Dataset
 	if False:
@@ -173,19 +172,18 @@ if __name__ == "__main__":
 	if mode==1: #training
 		model = MyModel.from_pretrained(model_id) #, torch_dtype=torch.float16
 		#model.config.num_hidden_layers=12
-		#model.model.layers = get_averaged_layers(model.model.layers, 12) #model.model.layers[:4]				
+		#model.model.layers = get_averaged_layers(model.model.layers, 12)
 		freeze_some_layers(model.model.layers, 1, 1)
-		model.model.embed_tokens.requires_grad_(False)		
-		#model.conv.weight.data.fill_(0.1)
+		model.model.embed_tokens.requires_grad_(False)
 		#import math; nn.init.kaiming_uniform_(model.conv.weight, a=math.sqrt(6))
 	else:
 		model = MyModel.from_pretrained(model_id) # "./model_temp/checkpoint-28600"
 		model.eval()
 	
 	# Start training
-	data_collator = ConvDataCollator() #FT/PT
+	data_collator = ConvDataCollator()
 
-	print("starting", "Traininig" if mode==1 else "Testing")	
+	print("starting", "Traininig" if mode==1 else "Testing")
 	training_args = TrainingArguments(
 		output_dir='./model_temp',
 		num_train_epochs=50,
@@ -193,16 +191,16 @@ if __name__ == "__main__":
 		gradient_accumulation_steps=2,
 		learning_rate=1e-5,
 		logging_steps=20,
-		save_steps=200,
 		save_total_limit=2,
-		eval_strategy="steps",
+		save_steps=5000,
 		eval_steps=5000,
+		eval_strategy="steps",		
 		per_device_eval_batch_size=1,
 		metric_for_best_model="eval_loss",
 		greater_is_better=False,
 		remove_unused_columns=False,
-		weight_decay=0.01,
-		warmup_steps=1000,
+		#weight_decay=0.01,
+		warmup_steps=100,
 		fp16=True,
 		#disable_tqdm=True,
 		report_to="none" #"tensorboard",
@@ -214,11 +212,10 @@ if __name__ == "__main__":
 		args=training_args,
 		train_dataset=train_dataset,
 		eval_dataset=test_dataset,
-		#compute_metrics=compute_metrics
 	)
 	
 	if mode==1:
-		trainer.train() #"./model_temp/checkpoint-18000"
+		trainer.train("./model_temp/checkpoint-200") #
 	else:
 		print(trainer.predict(test_dataset))
 
