@@ -9,7 +9,7 @@ import torch
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 from transformers import Trainer, TrainingArguments, AutoTokenizer, AutoModelForCausalLM, AutoModel, AutoModelForSequenceClassification, TrainerCallback
-from transformers import Qwen2Model,Qwen2ForCausalLM, LlamaForCausalLM
+from transformers import Qwen2Model,Qwen2ForCausalLM, LlamaForCausalLM, T5Tokenizer, T5ForConditionalGeneration
 
 from utils import Sonar, NLP, JinaAI, get_magnitudes
 from modeling import get_averaged_layers, freeze_some_layers, find_subsequence
@@ -58,38 +58,36 @@ class MyModel(Qwen2ForCausalLM):
 		self.hidden_dim = 896 #qwen:896
 		self.kernel_size, self.stride = 3, 3
 		self.embed_types = nn.Embedding(2, self.hidden_dim) #number of types, hidden_dim
-		self.conv = nn.Conv1d(
-			in_channels=self.hidden_dim,  # C
-			out_channels=self.hidden_dim, # or change if you want to map to different dim
-			kernel_size=self.kernel_size,
-			stride=self.stride,
-			padding=0
+		#self.conv = nn.Conv1d(in_channels=self.hidden_dim, out_channels=self.hidden_dim, kernel_size=self.kernel_size, stride=self.stride, padding=0), #v1
+		self.conv = nn.Sequential( #v1.2
+			nn.Conv1d(in_channels=self.hidden_dim, out_channels=self.hidden_dim, kernel_size=self.kernel_size, stride=self.stride, padding=0),
+			nn.GELU(),
 		)
 	
-	def trans(self, inputs_embeds, token_ids):
+	def trans(self, sent_ids, token_ids):
 		tokens_embeds = self.model.embed_tokens(token_ids)
-		if inputs_embeds is not None:
+		if sent_ids is not None:
+			x1 = self.model.embed_tokens(sent_ids)
+			x = x1.transpose(1, 2)
+			x = self.conv(x)  # (B, C, T') where T' = (T - 3)//3 + 1
+			inputs_embeds = x.transpose(1, 2)  # back to (B, T', C)
 			x = torch.cat([inputs_embeds, tokens_embeds], dim=1)
 			B, S, T = inputs_embeds.size(0), inputs_embeds.size(1), token_ids.size(1)
 			type_ids = torch.cat([torch.zeros((B, S), dtype=torch.long), torch.ones((B, T), dtype=torch.long)], dim=1).to(device)
 		else: #not considering this case yet
-			pass			
+			pass
 
 		type_embeds = self.embed_types(type_ids)
 		x = x + type_embeds
-		#print("\nmagnitudes:", get_magnitudes([inputs_embeds, tokens_embeds, type_embeds])); exit()
+		if torch.isnan(inputs_embeds).any().item():
+			print(get_magnitudes([x1, inputs_embeds, tokens_embeds, type_embeds]), sent_ids.shape); exit()
 		return x
 
-	def forward(self, sent_ids=None, token_ids=None, att_s=None, att_t=None, labels=None, **kwargs):
-		x1 = self.model.embed_tokens(sent_ids)
-		x = x1.transpose(1, 2)
-		x = self.conv(x)  # (B, C, T') where T' = (T - 3)//3 + 1
-		inputs_embeds = x.transpose(1, 2)  # back to (B, T', C)
-		
-		#if torch.isnan(inputs_embeds).any().item(): print(get_magnitudes([x1, inputs_embeds, self.conv.weight]), sent_ids.shape); exit()
+
+	def forward(self, sent_ids=None, token_ids=None, att_s=None, att_t=None, labels=None, **kwargs):				
 		#print("\nsent_ids", sent_ids.shape, sent_ids, "\ninputs_embeds", inputs_embeds.shape, "att_s", att_s.shape, att_s, "\ntoken_ids", token_ids, "\natt_t", att_t); exit()
 		attention_mask = torch.cat([att_s, att_t], dim=1)   #B,S+T,C
-		outputs = super().forward(inputs_embeds=self.trans(inputs_embeds, token_ids), attention_mask=attention_mask, labels=labels) #, **kwargs
+		outputs = super().forward(inputs_embeds=self.trans(sent_ids, token_ids), attention_mask=attention_mask, labels=labels) #, **kwargs
 		return outputs
 
 
@@ -98,18 +96,9 @@ class MyModel(Qwen2ForCausalLM):
 		for i in range(max_new_tokens):
 			att_t = torch.tensor( [[True] * token_ids.size(1)], device=device)
 			#print(sent_ids.shape, token_ids.shape, token_ids)
-			outputs = self.forward(sent_ids=sent_ids, token_ids=token_ids, att_s=att_s, att_t=att_t)
-			#past_key_values = outputs.past_key_values
-			
-			#argmax
+			outputs = self.forward(sent_ids=sent_ids, token_ids=token_ids, att_s=att_s, att_t=att_t)		
 			logits = outputs.logits[:, -1, :]
 			next_token = torch.argmax(logits, dim=-1, keepdim=True)
-
-			#temperature sampling
-			#temperature = 2.0  # <1.0 = more conservative; >1.0 = more random
-			#probs = nn.functional.softmax(logits / temperature, dim=-1)
-			#next_token = torch.multinomial(probs, num_samples=1)  # [B, 1]
-
 			generated.append(next_token)
 			if next_token.item() == tokenizer.eos_token_id: break #15164
 			token_ids = torch.cat([token_ids, next_token], dim=1)
@@ -152,17 +141,8 @@ if __name__ == "__main__":
 	tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)	
 	
 	# Dataset
-	if False:
-		embedding_model = JinaAI()  #Sonar(1)
-		nlp = NLP()
-		dataset = load_dataset("deepmind/narrativeqa", split="train[20000:]") #"mwpt5/MAWPS" | "ChilleD/SVAMP"
-		dataset = dataset.map(preprocess, batched=True, batch_size=12)
-		print("preprocess finished")
-		dataset = dataset.map(postprocess)
-		dataset.save_to_disk("./temp/narrativeqa_train_20k_2"); exit()		
-	else:
-		#dataset = load_from_disk("./temp/narrativeqa_train_20k")
-		dataset = concatenate_datasets([ load_from_disk("./temp/"+fname) for fname in ["narrativeqa_train_20k", "narrativeqa_train_20k_2"] ])
+	#dataset = load_from_disk("./temp/narrativeqa_train_20k")
+	dataset = concatenate_datasets([ load_from_disk("./temp/"+fname) for fname in ["narrativeqa_train_20k", "narrativeqa_train_20k_2"] ])
 	
 	dataset = dataset.train_test_split(test_size=0.005, seed=42)
 	train_dataset, test_dataset = dataset["train"], dataset["test"]
@@ -215,7 +195,7 @@ if __name__ == "__main__":
 	)
 	
 	if mode==1:
-		trainer.train("./model_temp/checkpoint-200") #
+		trainer.train() # "./model_temp/checkpoint-200"
 	else:
 		print(trainer.predict(test_dataset))
 
