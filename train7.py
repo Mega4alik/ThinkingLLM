@@ -72,10 +72,10 @@ class MyModel(T5ForConditionalGeneration):
 		inputs_embeds = x.transpose(1, 2)  # back to (B, T', C)
 		x = torch.cat([tokens_embeds, inputs_embeds], dim=1)
 
-		B, S, T = inputs_embeds.size(0), inputs_embeds.size(1), token_ids.size(1)
-		type_ids = torch.cat([torch.zeros((B, T), dtype=torch.long), torch.ones((B, S), dtype=torch.long)], dim=1).to(device)
-		type_embeds = self.embed_types(type_ids)
-		x = x + type_embeds
+		#B, S, T = inputs_embeds.size(0), inputs_embeds.size(1), token_ids.size(1)
+		#type_ids = torch.cat([torch.zeros((B, T), dtype=torch.long), torch.ones((B, S), dtype=torch.long)], dim=1).to(device)
+		#type_embeds = self.embed_types(type_ids)
+		#x = x + type_embeds
 
 		if torch.isnan(inputs_embeds).any().item():
 			print(get_magnitudes([x1, inputs_embeds, tokens_embeds, type_embeds]), sent_ids.shape); exit()
@@ -83,14 +83,14 @@ class MyModel(T5ForConditionalGeneration):
 
 
 	def forward(self, sent_ids=None, token_ids=None, att_s=None, att_t=None, labels=None, **kwargs):
-		#print("\nsent_ids", sent_ids.shape, sent_ids, "\ninputs_embeds", inputs_embeds.shape, "att_s", att_s.shape, att_s, "\ntoken_ids", token_ids, "\natt_t", att_t); exit()
+		#print("\nsent_ids", sent_ids.shape, sent_ids, "\natt_s", att_s.shape, "\ntoken_ids", token_ids.shape, token_ids, "\natt_t", att_t.shape, labels); exit()
 		attention_mask = torch.cat([att_t, att_s], dim=1)   #B,S+T,C
 		outputs = super().forward(inputs_embeds=self.trans(sent_ids, token_ids), attention_mask=attention_mask, labels=labels) #, **kwargs
 		return outputs
 
 
-	def generate(self, sent_ids=None, token_ids=None, att_s=None, att_t=None, max_new_tokens=32):
-		attention_mask = torch.cat([att_t, att_s], dim=1)   #B,S+T,C		
+	def generate(self, sent_ids=None, token_ids=None, att_s=None, att_t=None, max_new_tokens=32):		
+		attention_mask = torch.cat([att_t, att_s], dim=1)   #B,S+T,C
 		encoder_outputs = self.encoder(inputs_embeds=self.trans(sent_ids, token_ids), attention_mask=attention_mask)
 		decoder_input_ids = torch.tensor([[model.config.decoder_start_token_id]], device=device)
 		generated = []
@@ -122,9 +122,9 @@ class OwnTrainer(Trainer):
 
 
 #==============================================================================================
-if __name__ == "__main__":	
+if __name__ == "__main__":
 	device = torch.device("cuda")
-	mode = 1 #1-train,2-test
+	mode = 2 #1-train,2-test
 	model_id = "t5-small"
 	tokenizer = T5Tokenizer.from_pretrained(model_id)
 	
@@ -143,7 +143,7 @@ if __name__ == "__main__":
 		#model.model.embed_tokens.requires_grad_(False)
 		import math; nn.init.kaiming_uniform_(model.conv.weight, a=math.sqrt(6))
 	else:
-		model = MyModel.from_pretrained("./model_temp/checkpoint-50000")
+		model = MyModel.from_pretrained("./model_temp/checkpoint-6000")
 		model.eval()
 	
 	# Start training
@@ -153,8 +153,8 @@ if __name__ == "__main__":
 	training_args = TrainingArguments(
 		output_dir='./model_temp',
 	  	#group_by_length=True, length_column_name="len",
-		num_train_epochs=50,
-		per_device_train_batch_size=16,
+		num_train_epochs=20,
+		per_device_train_batch_size=4,
 		gradient_accumulation_steps=1,
 		learning_rate=1e-5,
 		logging_steps=20,
@@ -182,7 +182,7 @@ if __name__ == "__main__":
 	)
 	
 	if mode==1:
-		trainer.train("./model_temp/checkpoint-1000") # "./model_temp/checkpoint-200"
+		trainer.train() # "./model_temp/checkpoint-200"
 	else:
 		print(trainer.predict(test_dataset))
 
