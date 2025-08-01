@@ -24,11 +24,11 @@ class ConvDataCollator:
 		self.kernel_size, self.stride = 3, 3		
 
 	def apply_template(self, question):
-		return f"question: {question}"
+		return f"question: {question} context: "
 
 	def __call__(self, batch):
 		# conv part - sents
-		out = tokenizer([" ".join(x['sentences']) for x in batch], return_tensors="pt", padding=True, return_attention_mask=True) #B,S
+		out = tokenizer([" ".join(x['sentences']) for x in batch], return_tensors="pt", padding=True, return_attention_mask=True, add_special_tokens=False) #B,S
 		sent_ids, att_s = out.input_ids, out.attention_mask
 		att_s = att_s.unsqueeze(1).float()  # (B, 1, T)
 		pooled = nn.functional.max_pool1d(att_s, self.kernel_size, stride=self.stride)
@@ -40,7 +40,7 @@ class ConvDataCollator:
 		token_ids, att_t = out.input_ids, out.attention_mask
 		
 		# labels
-		out = tokenizer([random.choice(x['answers']) for x in batch], return_tensors="pt", padding=True, return_attention_mask=True)
+		out = tokenizer([random.choice(x['answers']) for x in batch], return_tensors="pt", padding=True, return_attention_mask=True, add_special_tokens=True)
 		labels = out.input_ids
 		
 		out = {'sent_ids': sent_ids, 'token_ids': token_ids, 'att_s':att_s, 'att_t':att_t, 'labels':labels}
@@ -70,11 +70,13 @@ class MyModel(T5ForConditionalGeneration):
 		x = x1.transpose(1, 2)
 		x = self.conv(x)  # (B, C, T') where T' = (T - 3)//3 + 1
 		inputs_embeds = x.transpose(1, 2)  # back to (B, T', C)
-		x = torch.cat([inputs_embeds, tokens_embeds], dim=1)
+		x = torch.cat([tokens_embeds, inputs_embeds], dim=1)
+
 		B, S, T = inputs_embeds.size(0), inputs_embeds.size(1), token_ids.size(1)
-		type_ids = torch.cat([torch.zeros((B, S), dtype=torch.long), torch.ones((B, T), dtype=torch.long)], dim=1).to(device)
+		type_ids = torch.cat([torch.zeros((B, T), dtype=torch.long), torch.ones((B, S), dtype=torch.long)], dim=1).to(device)
 		type_embeds = self.embed_types(type_ids)
 		x = x + type_embeds
+
 		if torch.isnan(inputs_embeds).any().item():
 			print(get_magnitudes([x1, inputs_embeds, tokens_embeds, type_embeds]), sent_ids.shape); exit()
 		return x
@@ -82,7 +84,7 @@ class MyModel(T5ForConditionalGeneration):
 
 	def forward(self, sent_ids=None, token_ids=None, att_s=None, att_t=None, labels=None, **kwargs):
 		#print("\nsent_ids", sent_ids.shape, sent_ids, "\ninputs_embeds", inputs_embeds.shape, "att_s", att_s.shape, att_s, "\ntoken_ids", token_ids, "\natt_t", att_t); exit()
-		attention_mask = torch.cat([att_s, att_t], dim=1)   #B,S+T,C
+		attention_mask = torch.cat([att_t, att_s], dim=1)   #B,S+T,C
 		outputs = super().forward(inputs_embeds=self.trans(sent_ids, token_ids), attention_mask=attention_mask, labels=labels) #, **kwargs
 		return outputs
 
@@ -141,7 +143,7 @@ if __name__ == "__main__":
 		#model.model.embed_tokens.requires_grad_(False)
 		import math; nn.init.kaiming_uniform_(model.conv.weight, a=math.sqrt(6))
 	else:
-		model = MyModel.from_pretrained("./model_temp/checkpoint-3000")
+		model = MyModel.from_pretrained("./model_temp/checkpoint-50000")
 		model.eval()
 	
 	# Start training
@@ -153,7 +155,7 @@ if __name__ == "__main__":
 	  	#group_by_length=True, length_column_name="len",
 		num_train_epochs=50,
 		per_device_train_batch_size=16,
-		gradient_accumulation_steps=2,
+		gradient_accumulation_steps=1,
 		learning_rate=1e-5,
 		logging_steps=20,
 		save_total_limit=2,
@@ -180,7 +182,7 @@ if __name__ == "__main__":
 	)
 	
 	if mode==1:
-		trainer.train() # "./model_temp/checkpoint-200"
+		trainer.train("./model_temp/checkpoint-1000") # "./model_temp/checkpoint-200"
 	else:
 		print(trainer.predict(test_dataset))
 
