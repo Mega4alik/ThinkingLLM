@@ -11,24 +11,33 @@ from torch.nn.utils.rnn import pad_sequence
 from transformers import Trainer, TrainingArguments
 from transformers import T5Tokenizer, AutoTokenizer, T5ForConditionalGeneration, LongT5ForConditionalGeneration
 
+#============================================================================
+
 from utils import Sonar, NLP, JinaAI, get_magnitudes
 from modeling import get_averaged_layers, freeze_some_layers, find_subsequence
 
+#============================================================================
 
 class ConvDataCollator:
+	def __init__(self):
+		self.kernel_size, self.stride = 3, 3
+
 	def apply_template(self, question, sentences):
 		context = " ".join(sentences)
 		return f"question: {question} context: {context}"
 
 	def __call__(self, batch):
-		st = [self.apply_template(x['question'], x['sentences']) for x in batch]
-		out = tokenizer(st, return_tensors="pt", padding=True, return_attention_mask=True, add_special_tokens=True)
-		input_ids, attention_mask = out.input_ids, out.attention_mask
-		
+		prompts = [self.apply_template(x['question'], x['sentences']) for x in batch]
+		out = tokenizer(prompts, return_tensors="pt", padding=True, return_attention_mask=True, add_special_tokens=True)
+		input_ids, att_s = out.input_ids, out.attention_mask
+		att_s = att_s.unsqueeze(1).float()  # (B, 1, T)
+		pooled = nn.functional.max_pool1d(att_s, self.kernel_size, stride=self.stride)
+		attention_mask = pooled.squeeze(1).bool()  # (B, T')
+
 		# labels
 		out = tokenizer([random.choice(x['answers']) for x in batch], return_tensors="pt", padding=True, return_attention_mask=True, add_special_tokens=True)
 		labels = out.input_ids
-		
+
 		out = {'input_ids': input_ids, 'attention_mask':attention_mask, 'labels':labels}
 		if mode==2: #test
 			out["question"] = [x["question"] for x in batch]
@@ -36,34 +45,29 @@ class ConvDataCollator:
 		return out
 
 
-class MyModel(LongT5ForConditionalGeneration):
+class MyModel(T5ForConditionalGeneration):
 	def __init__(self, config):
 		super().__init__(config)
-		self.hidden_dim = 512 #t5-small, 768
-		self.kernel_size, self.stride = 3, 3
-		self.embed_types = nn.Embedding(2, self.hidden_dim) #number of types, hidden_dim
+		self.hidden_dim = 768 #t5small-512, base-768, large-1024
+		self.kernel_size, self.stride = 3, 3		
 		self.conv = nn.Conv1d(in_channels=self.hidden_dim, out_channels=self.hidden_dim, kernel_size=self.kernel_size, stride=self.stride, padding=0) #v1
-		
-	
+
 	def trans(self, input_ids):
-		inputs_embeds = self.encoder.embed_tokens(input_ids)
-		x = inputs_embeds
-		#B, S, T = inputs_embeds.size(0), inputs_embeds.size(1), input_ids.size(1)
-		#type_ids = torch.cat([torch.zeros((B, T), dtype=torch.long), torch.ones((B, S), dtype=torch.long)], dim=1).to(device)
-		#type_embeds = self.embed_types(type_ids)
-		#x = x + type_embeds
+		x1 = self.encoder.embed_tokens(input_ids)
+		x = x1.transpose(1, 2)
+		x = self.conv(x)  # (B, C, T') where T' = (T - 3)//3 + 1
+		inputs_embeds = x.transpose(1, 2)  # back to (B, T', C)
 
 		if torch.isnan(inputs_embeds).any().item():
-			print(get_magnitudes([inputs_embeds]), input_ids.shape); exit()
-		return x
+			print(get_magnitudes([x1, inputs_embeds]), input_ids.shape); exit()
+		return inputs_embeds
 
-
-	def forward(self, input_ids=None, attention_mask=None, labels=None, **kwargs):		
+	def forward(self, input_ids=None, attention_mask=None, labels=None, **kwargs):
 		outputs = super().forward(inputs_embeds=self.trans(input_ids), attention_mask=attention_mask, labels=labels) #, **kwargs
 		return outputs
 
-	def generate_TEMP(self, input_ids=None, attention_mask=None, max_new_tokens=32):				
-		encoder_outputs = self.encoder(inputs_embeds=self.trans(sinput_ids), attention_mask=attention_mask)
+	def generate(self, input_ids=None, attention_mask=None, max_new_tokens=32):
+		encoder_outputs = self.encoder(inputs_embeds=self.trans(input_ids), attention_mask=attention_mask)
 		decoder_input_ids = torch.tensor([[model.config.decoder_start_token_id]], device=device)
 		generated = []
 		for i in range(max_new_tokens):
@@ -84,13 +88,12 @@ class OwnTrainer(Trainer):
 	def predict(self, test_dataset=None, ignore_keys=None, metric_key_prefix="eval"):
 		eval_dataloader  = self.get_eval_dataloader(test_dataset)
 		for step, inputs in enumerate(eval_dataloader):
-			with torch.no_grad():				
+			with torch.no_grad():
 				gen_ids = self.model.generate(input_ids=inputs['input_ids'])
 				generated = tokenizer.batch_decode(gen_ids, skip_special_tokens=False)[0]
 				print(generated, "ans:", inputs['answers'], "\n\n")
 				#compute_metrics( (preds, inputs['answers'], inputs['question']) )
 		return {"accuracy": 1.0}
-
 
 
 #==============================================================================================
