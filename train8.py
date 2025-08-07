@@ -95,7 +95,6 @@ class OwnTrainer(Trainer):
 				#compute_metrics( (preds, inputs['answers'], inputs['question']) )
 		return {"accuracy": 1.0}
 
-
 #==============================================================================================
 if __name__ == "__main__":
 	device = torch.device("cuda")
@@ -129,7 +128,7 @@ if __name__ == "__main__":
 		output_dir='./model_temp',
 	  	#group_by_length=True, length_column_name="len",
 		num_train_epochs=20,
-		per_device_train_batch_size=1,
+		per_device_train_batch_size=4,
 		gradient_accumulation_steps=2,
 		learning_rate=1e-5,
 		logging_steps=20,
