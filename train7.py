@@ -1,4 +1,4 @@
-# T5 [ CNN(t1, t2 t3), t4, t5,t6,t7] -> [t5,t6,t7] 
+# T5 [ CNN(sentences: t1, t2 t3), t4, t5,t6,t7] -> [t5,t6,t7] 
 # preprocessing is done in train4 
 # venv: US1-asr3.12
 

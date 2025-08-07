@@ -9,14 +9,6 @@ def file_get_contents(name):
     f = io.open(name, mode="r", encoding="utf-8") #utf-8 | Windows-1252
     return f.read()
 
-def pickle_save(path, obj):
-    with open(path, "wb") as file: pickle.dump(obj, file)
-
-def pickle_load(path):
-    with open(path, "rb") as file: 
-        obj = pickle.load(file)
-        return obj
-
 def get_magnitudes(a):
 	import torch
 	return [(torch.norm(t, p=2).item(), t.min().item(), t.max().item(), torch.isnan(t).any().item()) for t in a]
