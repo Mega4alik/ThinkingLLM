@@ -93,12 +93,12 @@ class OwnTrainer(Trainer):
 #==============================================================================================
 if __name__ == "__main__":
 	device = torch.device("cuda")
-	mode = 2 #1-train,2-test
+	mode = 1 #1-train,2-test
 	model_id = "t5-base"
 	tokenizer = AutoTokenizer.from_pretrained(model_id)
 	
 	# Dataset
-	dataset = concatenate_datasets([ load_from_disk("./temp/"+fname) for fname in ["narrativeqa_train_20k", "narrativeqa_train_20k_2"] ])
+	dataset = concatenate_datasets([ load_from_disk("./temp/"+fname) for fname in ["narrativeqa_train_20k", "narrativeqa_train_20k_2", "hotpotqa_train_jinaai_1", "hotpotqa_train_jinaai_2"] ])
 	#dataset = dataset.map(postprocess) #set "len"
 	dataset = dataset.train_test_split(test_size=0.005, seed=42)
 	train_dataset, test_dataset = dataset["train"], dataset["test"]
@@ -108,7 +108,7 @@ if __name__ == "__main__":
 	if mode==1: #training
 		model = MyModel.from_pretrained(model_id)		
 	else:
-		model = MyModel.from_pretrained("./model_temp/checkpoint-34000")
+		model = MyModel.from_pretrained("./model_temp/checkpoint-")
 		model.eval()
 	
 	# Start training
@@ -147,7 +147,7 @@ if __name__ == "__main__":
 	)
 	
 	if mode==1:
-		trainer.train("./model_temp/checkpoint-34000")
+		trainer.train("./model_temp/checkpoint-86000")
 	else:
 		print(trainer.predict(test_dataset))
 

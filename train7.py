@@ -128,8 +128,7 @@ if __name__ == "__main__":
 	model_id = "t5-small"
 	tokenizer = T5Tokenizer.from_pretrained(model_id)
 	
-	# Dataset
-	#dataset = load_from_disk("./temp/narrativeqa_train_20k")
+	# Dataset	
 	dataset = concatenate_datasets([ load_from_disk("./temp/"+fname) for fname in ["narrativeqa_train_20k", "narrativeqa_train_20k_2"] ])
 	#dataset = dataset.map(postprocess) #set "len"
 
@@ -143,7 +142,7 @@ if __name__ == "__main__":
 		#model.model.embed_tokens.requires_grad_(False)
 		import math; nn.init.kaiming_uniform_(model.conv.weight, a=math.sqrt(6))
 	else:
-		model = MyModel.from_pretrained("./model_temp/checkpoint-77000")
+		model = MyModel.from_pretrained("./model_temp/checkpoint-")
 		model.eval()
 	
 	# Start training

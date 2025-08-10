@@ -87,7 +87,6 @@ if __name__=="__main__": #run2
 	embedding_model = JinaAI()
 	pre = './temp'
 	dataset = load_from_disk(pre+"/hotpotqa_train")
-	dataset = dataset.select(range(20000, 100000))  # keep it a Dataset
+	dataset = dataset.select(range(20000, 90447))  # keep it a Dataset
 	dataset = dataset.map(postprocess_batched, batched=True, batch_size=256)
 	dataset.save_to_disk(pre+"/hotpotqa_train_jinaai_2")
-
