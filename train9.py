@@ -50,7 +50,7 @@ class MyModel(T5ForConditionalGeneration):
 			nn.Linear(self.embedding_dim, 4864, bias=False),
 			nn.GELU(),
 			nn.Linear(4864, self.hidden_dim, bias=False)
-		)		
+		)
 					
 	def trans(self, inputs_embeds):
 		x = self.sent_proj(inputs_embeds) #self.fc1(self.ln1(inputs_embeds))
@@ -93,7 +93,7 @@ class OwnTrainer(Trainer):
 #==============================================================================================
 if __name__ == "__main__":
 	device = torch.device("cuda")
-	mode = 1 #1-train,2-test
+	mode = 2 #1-train,2-test
 	model_id = "t5-base"
 	tokenizer = AutoTokenizer.from_pretrained(model_id)
 	
@@ -108,7 +108,7 @@ if __name__ == "__main__":
 	if mode==1: #training
 		model = MyModel.from_pretrained(model_id)		
 	else:
-		model = MyModel.from_pretrained("./model_temp/checkpoint-")
+		model = MyModel.from_pretrained("./model_temp/checkpoint-84000")
 		model.eval()
 	
 	# Start training
@@ -147,7 +147,7 @@ if __name__ == "__main__":
 	)
 	
 	if mode==1:
-		trainer.train("./model_temp/checkpoint-86000")
+		trainer.train("./model_temp/checkpoint-150000")
 	else:
-		print(trainer.predict(test_dataset))
+		print(trainer.predict(train_dataset))
 

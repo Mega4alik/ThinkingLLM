@@ -91,6 +91,13 @@ LABELS were incorrect!!!! because padded part of tokens were part of labels
 
 
 	
+# Train9 JinaAI embs [qemb, se1, se2, ..] -> label[t1, t2, t3]. 
+## m1. trainsize:~120k  best_val:86k, trained until 150k (20epochs). contstantly returns nonsense like<extra_id_0> a<extra_id_1> a<pad><pad><pad> ans: [['21,177']]'
+
+
+# Train7 trainsize=~120k
+## m1 Colab. needs to be continued because eval loss still dropping after 32k updates
+? need to do something with 512 limit here
 
 
 
